@@ -24,6 +24,7 @@ export default function App() {
   const [monitoringList, setMonitoringList] = useState<MonitoringStudent[]>([]);
   const [resultsList, setResultsList] = useState<ExamResult[]>([]);
   const [selectedPrintExam, setSelectedPrintExam] = useState<Exam | null>(null);
+  const [preselectedStudent, setPreselectedStudent] = useState<Student | null>(null);
 
   // Read URL query parameter "?mode=siswa" or "?mode=admin"
   useEffect(() => {
@@ -212,6 +213,12 @@ export default function App() {
     }
   };
 
+  // Switch to Student mode with pre-selected student
+  const handleSelectStudentForExam = (student: Student) => {
+    setPreselectedStudent(student);
+    setCurrentMode('siswa');
+  };
+
   // Handle Exam submission from student
   const handleExamSubmitted = (newResult: ExamResult) => {
     setResultsList((prev) => [newResult, ...prev]);
@@ -242,6 +249,7 @@ export default function App() {
             students={students}
             exams={exams}
             schoolSettings={schoolSettings}
+            preselectedStudent={preselectedStudent}
             onViolationOccurred={loadInitialData}
             onExamSubmitted={handleExamSubmitted}
           />
@@ -285,6 +293,7 @@ export default function App() {
                 onUpdateStudent={handleUpdateStudent}
                 onDeleteStudent={handleDeleteStudent}
                 onBulkAddStudents={handleBulkAddStudents}
+                onSelectStudentForExam={handleSelectStudentForExam}
               />
             )}
 

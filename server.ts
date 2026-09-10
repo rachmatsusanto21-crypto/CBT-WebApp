@@ -158,6 +158,23 @@ app.delete("/api/students/:id", (req, res) => {
   }
 });
 
+// Bulk delete students
+app.post("/api/students/bulk-delete", (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ error: "Daftar ID siswa tidak valid" });
+    }
+    const idSet = new Set(ids);
+    const beforeCount = students.length;
+    students = students.filter((s) => !idSet.has(s.id));
+    const deletedCount = beforeCount - students.length;
+    res.json({ success: true, count: deletedCount });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========================
 // RIWAYAT SOAL & DEPLOYMENT APIs
 // ========================
