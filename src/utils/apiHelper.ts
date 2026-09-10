@@ -40,12 +40,14 @@ export async function safeFetchJson<T = any>(
     const text = await res.text();
     let friendlyError = `Server merespon dengan status ${res.status}`;
     const lowerText = text.toLowerCase();
-    if (lowerText.includes('the page cannot') || lowerText.includes('the page could not') || lowerText.includes('<html')) {
-      friendlyError = 'Server sedang memuat atau memproses permintaan. Silakan tunggu beberapa detik dan coba kembali.';
-    } else if (res.status === 504 || res.status === 502) {
-      friendlyError = 'Waktu permintaan habis (Gateway Timeout). Silakan kurangi jumlah butir soal atau coba lagi.';
+    if (res.status === 504 || res.status === 502) {
+      friendlyError = 'Waktu pembuatan soal habis (Gateway Timeout). Silakan kurangi jumlah butir soal (misal 5-10 soal) atau coba lagi dalam beberapa detik.';
+    } else if (res.status === 503) {
+      friendlyError = 'Layanan AI sedang mengalami lonjakan trafik sementara. Silakan tunggu beberapa saat dan klik tombol lagi.';
     } else if (res.status === 404) {
       friendlyError = 'Layanan API tidak ditemukan (404).';
+    } else if (lowerText.includes('the page cannot') || lowerText.includes('the page could not') || lowerText.includes('<html')) {
+      friendlyError = 'Koneksi ke server terputus sementara atau server sedang memuat ulang. Silakan tunggu beberapa detik dan coba kembali.';
     }
 
     return {
