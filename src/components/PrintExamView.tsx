@@ -194,7 +194,11 @@ export const PrintExamView: React.FC<PrintExamViewProps> = ({
         {/* Kop Surat Resmi */}
         <Letterhead
           settings={schoolSettings}
-          documentTitle="NASKAH SOAL PENILAIAN HASIL BELAJAR"
+          documentTitle={
+            currentExam?.examType
+              ? `NASKAH SOAL ${currentExam.examType.toUpperCase()}`
+              : 'NASKAH SOAL PENILAIAN HASIL BELAJAR'
+          }
           subTitle={currentExam ? currentExam.title : 'UJIAN AKHIR SEMESTER'}
           examInfo={
             currentExam
@@ -226,18 +230,32 @@ export const PrintExamView: React.FC<PrintExamViewProps> = ({
           </ol>
         </div>
 
-        {/* Butir Soal Ujian Pilihan Ganda */}
+        {/* Butir Soal Ujian */}
         {currentExam && (
           <div className="space-y-6 mt-6">
             <h4 className="text-center font-bold text-sm uppercase tracking-wide border-b border-black pb-1 mb-4">
-              I. PILIHAN GANDA
+              I. BUTIR SOAL UJIAN ({currentExam.questions.length} SOAL)
             </h4>
 
             {currentExam.questions.map((q, idx) => (
-              <div key={q.id} className="print-break-inside-avoid text-xs sm:text-[13px] leading-relaxed">
+              <div key={q.id} className="print-break-inside-avoid text-xs sm:text-[13px] leading-relaxed border-b border-gray-100 pb-3">
                 <div className="flex items-start space-x-2">
                   <span className="font-bold w-6 text-right flex-shrink-0">{idx + 1}.</span>
                   <div className="flex-1">
+                    {/* Render Image if exists */}
+                    {q.imageUrl && (
+                      <div className="my-2 p-1 border border-gray-300 inline-block max-w-sm">
+                        <img
+                          src={q.imageUrl}
+                          alt={`Gambar Soal ${idx + 1}`}
+                          className="max-h-44 w-auto object-contain"
+                        />
+                        <span className="block text-[10px] text-gray-500 italic mt-0.5">
+                          Gambar Stimulus #{idx + 1}
+                        </span>
+                      </div>
+                    )}
+
                     <p className="text-gray-900 font-medium whitespace-pre-line">{q.question}</p>
 
                     {/* Options (A, B, C, D) in 2-column print layout */}

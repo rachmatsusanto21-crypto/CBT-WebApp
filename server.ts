@@ -3,20 +3,21 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
-import { initialExams, initialStudents, initialSchoolSettings } from "./src/initialData";
-import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, Question } from "./src/types";
+import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages, EDUCATIONAL_IMAGE_PRESETS } from "./src/initialData";
+import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, Question, SavedQuestionPackage, QuestionType, ExamType } from "./src/types";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "25mb" }));
 
 // In-Memory Database
 let exams: Exam[] = [...initialExams];
 let students: Student[] = [...initialStudents];
 let schoolSettings: SchoolSettings = { ...initialSchoolSettings };
+let savedPackages: SavedQuestionPackage[] = [...initialSavedPackages];
 let monitoringList: Map<string, MonitoringStudent> = new Map();
 let examResults: ExamResult[] = [];
 
@@ -42,6 +43,7 @@ app.get("/api/initial-state", (req, res) => {
     exams,
     students,
     schoolSettings,
+    savedPackages,
     monitoring: Array.from(monitoringList.values()),
     results: examResults,
   });
@@ -58,21 +60,213 @@ app.put("/api/settings", (req, res) => {
   }
 });
 
-// Add student
+// ========================
+// MANAJEMEN DATA SISWA APIs
+// ========================
+
+// Get all students
+app.get("/api/students", (req, res) => {
+  res.json({ success: true, students });
+});
+
+// Add single student
 app.post("/api/students", (req, res) => {
   try {
-    const { name, nisn, className } = req.body;
+    const { name, nisn, className, gender, noAbsen, status } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Nama siswa wajib diisi" });
     }
     const newStudent: Student = {
-      id: "std-" + Date.now(),
-      name,
-      nisn: nisn || "00" + Math.floor(10000000 + Math.random() * 90000000),
+      id: "std-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+      name: name.trim(),
+      nisn: (nisn || "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
       class: className || "X-MIPA 1",
+      gender: gender || "L",
+      noAbsen: noAbsen ? Number(noAbsen) : students.length + 1,
+      status: status || "Aktif",
     };
     students.push(newStudent);
     res.json({ success: true, student: newStudent });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bulk import students
+app.post("/api/students/bulk", (req, res) => {
+  try {
+    const { students: rawList } = req.body;
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      return res.status(400).json({ error: "Data siswa massal tidak valid atau kosong" });
+    }
+
+    const createdList: Student[] = [];
+    rawList.forEach((item: any, idx: number) => {
+      if (item && item.name) {
+        const std: Student = {
+          id: "std-" + Date.now() + "-" + idx,
+          name: item.name.trim(),
+          nisn: (item.nisn || "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
+          class: item.class || item.className || "X-MIPA 1",
+          gender: item.gender === "P" ? "P" : "L",
+          noAbsen: item.noAbsen ? Number(item.noAbsen) : idx + 1,
+          status: item.status || "Aktif",
+        };
+        students.push(std);
+        createdList.push(std);
+      }
+    });
+
+    res.json({ success: true, count: createdList.length, students: createdList });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update student
+app.put("/api/students/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, nisn, className, gender, noAbsen, status } = req.body;
+    const index = students.findIndex((s) => s.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Siswa tidak ditemukan" });
+    }
+    students[index] = {
+      ...students[index],
+      name: name !== undefined ? name.trim() : students[index].name,
+      nisn: nisn !== undefined ? nisn.trim() : students[index].nisn,
+      class: className !== undefined ? className : students[index].class,
+      gender: gender !== undefined ? gender : students[index].gender,
+      noAbsen: noAbsen !== undefined ? Number(noAbsen) : students[index].noAbsen,
+      status: status !== undefined ? status : students[index].status,
+    };
+    res.json({ success: true, student: students[index] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete student
+app.delete("/api/students/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    students = students.filter((s) => s.id !== id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================
+// RIWAYAT SOAL & DEPLOYMENT APIs
+// ========================
+
+// Get question history
+app.get("/api/question-history", (req, res) => {
+  res.json({ success: true, packages: savedPackages });
+});
+
+// Save question package to history
+app.post("/api/question-history", (req, res) => {
+  try {
+    const {
+      title,
+      subject,
+      grade,
+      examType,
+      topic,
+      difficulty,
+      questionType,
+      questions,
+    } = req.body;
+
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: "Daftar butir soal tidak boleh kosong" });
+    }
+
+    const newPackage: SavedQuestionPackage = {
+      id: "pkg-" + Date.now(),
+      title: title || `Paket Soal: ${subject || "Umum"} (${examType || "Penilaian"})`,
+      subject: subject || "Umum",
+      grade: grade || "Kelas X",
+      examType: examType || "Penilaian Akhir Bab",
+      topic: topic || "-",
+      difficulty: difficulty || "Sedang",
+      questionCount: questions.length,
+      questionType: questionType || "pilihan_ganda",
+      questions: questions.map((q: any, idx: number) => ({
+        id: q.id || `q-${Date.now()}-${idx}`,
+        number: idx + 1,
+        question: q.question,
+        questionType: q.questionType || questionType || "pilihan_ganda",
+        imageUrl: q.imageUrl || undefined,
+        options: q.options || { a: "", b: "", c: "", d: "" },
+        correctAnswer: q.correctAnswer || "a",
+        correctAnswers: q.correctAnswers || undefined,
+        explanation: q.explanation || "",
+        category: q.category || subject || "Umum",
+      })),
+      savedAt: new Date().toISOString(),
+      isDeployed: false,
+    };
+
+    savedPackages.unshift(newPackage);
+    res.json({ success: true, package: newPackage });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete package from history
+app.delete("/api/question-history/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    savedPackages = savedPackages.filter((p) => p.id !== id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deploy questions from history directly into active exams
+app.post("/api/question-history/deploy", (req, res) => {
+  try {
+    const { packageId, code, token, durationMinutes, title, examType } = req.body;
+    const pkg = savedPackages.find((p) => p.id === packageId);
+    if (!pkg) {
+      return res.status(404).json({ error: "Paket soal tidak ditemukan dalam riwayat" });
+    }
+
+    // Generate smart exam code e.g. "PAN201", "IPS305", "JAW102"
+    const prefix = (pkg.subject || "CBT")
+      .replace(/[^a-zA-Z]/g, "")
+      .slice(0, 3)
+      .toUpperCase();
+    const generatedCode = code || `${prefix}${Math.floor(100 + Math.random() * 900)}`;
+    const generatedToken = (token || `CBT${new Date().getFullYear()}`).trim().toUpperCase();
+
+    const deployedExam: Exam = {
+      id: "exam-" + Date.now(),
+      code: generatedCode.trim().toUpperCase(),
+      title: title || pkg.title,
+      subject: pkg.subject,
+      grade: pkg.grade,
+      examType: examType || pkg.examType || "Penilaian Akhir Bab",
+      token: generatedToken,
+      durationMinutes: Number(durationMinutes) || (pkg.questionCount > 25 ? 60 : 30),
+      questions: pkg.questions,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    exams.unshift(deployedExam);
+
+    // Update package status in history
+    pkg.isDeployed = true;
+    pkg.deployedExamCode = deployedExam.code;
+
+    res.json({ success: true, exam: deployedExam, package: pkg });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -297,7 +491,15 @@ app.get("/api/results", (req, res) => {
 // Gemini AI: Generate Exam Questions
 app.post("/api/gemini/generate-questions", async (req, res) => {
   try {
-    const { topic, grade, subject, count = 5, difficulty = "Sedang" } = req.body;
+    const {
+      topic,
+      grade,
+      subject = "Umum",
+      count = 5,
+      difficulty = "Sedang",
+      questionType = "pilihan_ganda",
+      examType = "Penilaian Akhir Bab",
+    } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: "Topik atau kisi-kisi soal wajib diisi" });
@@ -307,20 +509,46 @@ app.post("/api/gemini/generate-questions", async (req, res) => {
       return res.status(500).json({ error: "GEMINI_API_KEY tidak ditemukan di environment" });
     }
 
-    const prompt = `Anda adalah pembuat soal ujian profesional standar Kurikulum Merdeka / Nasional Indonesia.
-Buatkan ${count} butir soal pilihan ganda (opsi a, b, c, d) berkualitas tinggi untuk:
-- Mata Pelajaran: ${subject || 'Umum'}
-- Jenjang / Kelas: ${grade || 'SMA/SMK'}
+    const safeCount = Math.min(50, Math.max(1, Number(count) || 5));
+
+    let typeGuideline = "";
+    if (questionType === "pilihan_ganda") {
+      typeGuideline = `Seluruh soal harus berbentuk Pilihan Ganda dengan 4 pilihan (a, b, c, d) dan 1 jawaban benar mutlak. correctAnswer harus berupa salah satu dari 'a', 'b', 'c', atau 'd'.`;
+    } else if (questionType === "pilihan_ganda_kompleks") {
+      typeGuideline = `Seluruh soal berbentuk Pilihan Ganda Kompleks (Multi-Jawaban). Berikan 4 pilihan (a, b, c, d) di mana terdapat 2 atau lebih jawaban yang benar. Sertakan 'correctAnswers' berupa array huruf kecil (contoh: ["a", "c"]). 'correctAnswer' diisi huruf pertama jawaban benar.`;
+    } else if (questionType === "benar_salah") {
+      typeGuideline = `Seluruh soal berbentuk Benar / Salah. Teks pertanyaan menyajikan stimulus dan sebuah pernyataan logis. options a diisi "Benar" dan options b diisi "Salah" (options c dan d beri "-"). correctAnswer diisi "a" jika pernyataan Benar, atau "b" jika Salah.`;
+    } else if (questionType === "isian_singkat") {
+      typeGuideline = `Seluruh soal berbentuk Isian Singkat. Pertanyaan menguji istilah, rumus, nama konsep, atau angka penting. options beri teks alternatif pengecoh singkat, correctAnswer diisi kata kunci atau jawaban eksak singkat (1-3 kata).`;
+    } else if (questionType === "uraian") {
+      typeGuideline = `Seluruh soal berbentuk Soal Uraian / Essay Terbuka yang mendalam. options beri aspek penilaian (a: Aspek Pemahaman, b: Analisis, c: Solusi, d: Kesimpulan), correctAnswer diisi ringkasan jawaban inti, dan explanation diisi rubrik penilaian lengkap beserta poin-poin jawaban yang diharapkan.`;
+    } else {
+      typeGuideline = `Variasikan butir soal dengan proporsi: sebagian Pilihan Ganda (PG), sebagian Benar/Salah, dan sebagian Isian Singkat.`;
+    }
+
+    const prompt = `Anda adalah pembuat soal ujian profesional standar Kurikulum Merdeka Indonesia dan Asesmen Nasional.
+Tugas Anda adalah merumuskan ${safeCount} butir naskah soal berkualitas tinggi dan bebas ambigu untuk:
+- Jenis Ujian: ${examType}
+- Mata Pelajaran: ${subject}
+- Jenjang / Kelas: ${grade || "SMA/SMK"}
 - Topik / Materi: ${topic}
 - Tingkat Kesulitan: ${difficulty}
+- Bentuk Soal: ${questionType}
 
-Pastikan soal memiliki satu jawaban benar yang pasti, pengecoh (distractor) yang logis, dan pembahasan lengkap.
-Kembalikan HANYA JSON array sesuai skema yang ditentukan.`;
+Pedoman Bentuk Soal:
+${typeGuideline}
+
+Ketentuan Khusus:
+1. Soal harus relevan secara kontekstual dengan materi ${subject} di Indonesia.
+2. Hindari soal yang membingungkan; buat stimulus bacaan/kasus jika relevan.
+3. Berikan pembahasan (explanation) konsep edukatif yang jelas untuk setiap soal.
+4. Kembalikan HANYA JSON array sesuai skema yang ditentukan tanpa teks tambahan.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.8-flash",
       contents: prompt,
       config: {
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -329,13 +557,17 @@ Kembalikan HANYA JSON array sesuai skema yang ditentukan.`;
             properties: {
               question: {
                 type: Type.STRING,
-                description: "Teks pertanyaan lengkap dan jelas",
+                description: "Teks pertanyaan lengkap beserta stimulus jika ada",
+              },
+              questionType: {
+                type: Type.STRING,
+                description: "Jenis bentuk soal: pilihan_ganda, pilihan_ganda_kompleks, benar_salah, isian_singkat, atau uraian",
               },
               options: {
                 type: Type.OBJECT,
                 properties: {
-                  a: { type: Type.STRING, description: "Opsi A" },
-                  b: { type: Type.STRING, description: "Opsi B" },
+                  a: { type: Type.STRING, description: "Opsi A atau Opsi Benar" },
+                  b: { type: Type.STRING, description: "Opsi B atau Opsi Salah" },
                   c: { type: Type.STRING, description: "Opsi C" },
                   d: { type: Type.STRING, description: "Opsi D" },
                 },
@@ -343,15 +575,20 @@ Kembalikan HANYA JSON array sesuai skema yang ditentukan.`;
               },
               correctAnswer: {
                 type: Type.STRING,
-                description: "Kunci jawaban: a, b, c, atau d",
+                description: "Kunci jawaban utama (a/b/c/d atau kata kunci singkat)",
+              },
+              correctAnswers: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Array jawaban benar jika bentuk pilihan ganda kompleks, contoh: ['a', 'c']",
               },
               explanation: {
                 type: Type.STRING,
-                description: "Pembahasan konsep penyelesaian yang benar",
+                description: "Pembahasan konsep penyelesaian atau rubrik yang benar",
               },
               category: {
                 type: Type.STRING,
-                description: "Subtopik atau kompetensi dasar",
+                description: "Subtopik materi",
               },
             },
             required: ["question", "options", "correctAnswer", "explanation"],
@@ -365,29 +602,43 @@ Kembalikan HANYA JSON array sesuai skema yang ditentukan.`;
     try {
       questionsRaw = JSON.parse(rawText);
     } catch {
-      // Fallback regex parse if needed
       const match = rawText.match(/\[[\s\S]*\]/);
       if (match) {
         questionsRaw = JSON.parse(match[0]);
       }
     }
 
-    const formattedQuestions: Question[] = questionsRaw.map((q, idx) => ({
-      id: "q-gen-" + Date.now() + "-" + idx,
-      number: idx + 1,
-      question: q.question,
-      options: {
-        a: q.options?.a || "",
-        b: q.options?.b || "",
-        c: q.options?.c || "",
-        d: q.options?.d || "",
-      },
-      correctAnswer: (q.correctAnswer || "a").toLowerCase() as "a" | "b" | "c" | "d",
-      explanation: q.explanation || "",
-      category: q.category || topic,
-    }));
+    // Determine matching preset image for subject if appropriate
+    const matchingPreset = EDUCATIONAL_IMAGE_PRESETS.find(
+      (p) =>
+        p.category.toLowerCase().includes(subject.toLowerCase()) ||
+        subject.toLowerCase().includes(p.category.toLowerCase())
+    );
 
-    res.json({ success: true, questions: formattedQuestions });
+    const formattedQuestions: Question[] = questionsRaw.map((q, idx) => {
+      // Suggest image for the first or second question if subject matches
+      const hasImage = matchingPreset && idx === 0;
+
+      return {
+        id: "q-gen-" + Date.now() + "-" + idx,
+        number: idx + 1,
+        question: q.question,
+        questionType: (q.questionType as QuestionType) || (questionType !== "campuran" ? (questionType as QuestionType) : "pilihan_ganda"),
+        imageUrl: hasImage ? matchingPreset.url : undefined,
+        options: {
+          a: q.options?.a || "",
+          b: q.options?.b || "",
+          c: q.options?.c || "",
+          d: q.options?.d || "",
+        },
+        correctAnswer: (q.correctAnswer || "a").toString().toLowerCase(),
+        correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers.map((x: string) => x.toLowerCase()) : undefined,
+        explanation: q.explanation || "",
+        category: q.category || topic,
+      };
+    });
+
+    res.json({ success: true, count: formattedQuestions.length, questions: formattedQuestions });
   } catch (err: any) {
     console.error("Gemini Question Generator error:", err);
     res.status(500).json({ error: err.message || "Gagal membuat soal dengan AI" });

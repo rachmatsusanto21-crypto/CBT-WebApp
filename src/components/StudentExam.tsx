@@ -45,7 +45,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [answers, setAnswers] = useState<Record<string, 'a' | 'b' | 'c' | 'd'>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [doubtStatus, setDoubtStatus] = useState<Record<string, boolean>>({});
   const [timeLeftSeconds, setTimeLeftSeconds] = useState<number>(1800);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -62,7 +62,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
 
   const activeStudentRef = useRef<Student | null>(null);
   const activeExamRef = useRef<Exam | null>(null);
-  const answersRef = useRef<Record<string, 'a' | 'b' | 'c' | 'd'>>({});
+  const answersRef = useRef<Record<string, string>>({});
 
   activeStudentRef.current = activeStudent;
   activeExamRef.current = activeExam;
@@ -259,13 +259,43 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     }
   };
 
-  // Handle Option Select
-  const handleSelectOption = (opt: 'a' | 'b' | 'c' | 'd') => {
+  // Handle Single Option Select (Pilihan Ganda & Benar Salah)
+  const handleSelectOption = (opt: string) => {
     if (!activeExam) return;
     const currentQuestion = activeExam.questions[currentIndex];
     setAnswers((prev) => ({
       ...prev,
       [currentQuestion.id]: opt,
+    }));
+  };
+
+  // Handle Multi-Select (Pilihan Ganda Kompleks)
+  const handleToggleComplexOption = (optKey: string) => {
+    if (!activeExam) return;
+    const currentQuestion = activeExam.questions[currentIndex];
+    const currentAns = answers[currentQuestion.id] || '';
+    const currentSet = new Set(currentAns.split(',').map((s) => s.trim()).filter(Boolean));
+
+    if (currentSet.has(optKey)) {
+      currentSet.delete(optKey);
+    } else {
+      currentSet.add(optKey);
+    }
+
+    const sortedResult = Array.from(currentSet).sort().join(',');
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion.id]: sortedResult,
+    }));
+  };
+
+  // Handle Free-form Text (Isian Singkat & Uraian)
+  const handleTextAnswer = (text: string) => {
+    if (!activeExam) return;
+    const currentQuestion = activeExam.questions[currentIndex];
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion.id]: text,
     }));
   };
 
@@ -298,15 +328,42 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     }> = [];
 
     questions.forEach((q, idx) => {
-      const studentAns = answers[q.id];
-      if (studentAns === q.correctAnswer) {
+      const studentAns = (answers[q.id] || '').trim();
+      const qType = q.questionType || 'pilihan_ganda';
+      let isCorrect = false;
+
+      if (qType === 'pilihan_ganda' || qType === 'benar_salah') {
+        isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.toLowerCase());
+      } else if (qType === 'pilihan_ganda_kompleks') {
+        const studentSet = new Set(studentAns.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
+        const correctSet = new Set(q.correctAnswer.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
+        isCorrect = studentSet.size === correctSet.size && [...studentSet].every((val) => correctSet.has(val));
+      } else if (qType === 'isian_singkat') {
+        isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.trim().toLowerCase());
+      } else if (qType === 'uraian') {
+        isCorrect = Boolean(studentAns.length >= 10);
+      } else {
+        isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.toLowerCase());
+      }
+
+      if (isCorrect) {
         correctCount += 1;
       } else {
+        // Format display answers
+        const optKey = studentAns.toLowerCase() as 'a' | 'b' | 'c' | 'd';
+        const studentLabel = studentAns
+          ? (q.options && q.options[optKey] ? `${studentAns.toUpperCase()}: ${q.options[optKey]}` : studentAns)
+          : 'Tidak Dijawab';
+        const corrKey = q.correctAnswer.toLowerCase() as 'a' | 'b' | 'c' | 'd';
+        const correctLabel = q.options && q.options[corrKey]
+          ? `${q.correctAnswer.toUpperCase()}: ${q.options[corrKey]}`
+          : q.correctAnswer;
+
         wrongAnswers.push({
           questionNumber: idx + 1,
           question: q.question,
-          studentAnswer: studentAns ? `${studentAns.toUpperCase()}: ${q.options[studentAns]}` : 'Tidak Dijawab',
-          correctAnswer: `${q.correctAnswer.toUpperCase()}: ${q.options[q.correctAnswer]}`,
+          studentAnswer: studentLabel,
+          correctAnswer: correctLabel,
           explanation: q.explanation || 'Pembahasan materi belum tersedia.',
         });
       }
@@ -584,11 +641,18 @@ export const StudentExam: React.FC<StudentExamProps> = ({
               CBT
             </div>
             <div>
-              <p className="text-sm font-semibold text-white truncate max-w-[200px] sm:max-w-md">
-                {activeExam.title}
-              </p>
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-semibold text-white truncate max-w-[200px] sm:max-w-md">
+                  {activeExam.title}
+                </p>
+                {activeExam.examType && (
+                  <span className="hidden md:inline-block bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-bold px-2 py-0.5 rounded">
+                    {activeExam.examType}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400">
-                Siswa: <span className="text-blue-300 font-medium">{activeStudent.name}</span> ({activeStudent.class})
+                Siswa: <span className="text-blue-300 font-medium">{activeStudent.name}</span> ({activeStudent.class}) • {activeExam.subject}
               </p>
             </div>
           </div>
@@ -623,8 +687,8 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           <main className="lg:col-span-3 flex flex-col space-y-4">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 sm:p-7 shadow-lg flex-1 flex flex-col">
               {/* Question Header */}
-              <div className="flex items-center justify-between border-b border-slate-700 pb-3 mb-5">
-                <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-700 pb-3 mb-5 gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="bg-blue-600 text-white font-bold text-sm px-3 py-1 rounded-lg">
                     Soal No. {currentIndex + 1}
                   </span>
@@ -634,6 +698,17 @@ export const StudentExam: React.FC<StudentExamProps> = ({
                       {currentQ.category}
                     </span>
                   )}
+                  <span className="text-[11px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded-md font-semibold">
+                    {currentQ?.questionType === 'pilihan_ganda_kompleks'
+                      ? 'Pilihan Ganda Kompleks'
+                      : currentQ?.questionType === 'benar_salah'
+                      ? 'Benar / Salah'
+                      : currentQ?.questionType === 'isian_singkat'
+                      ? 'Isian Singkat'
+                      : currentQ?.questionType === 'uraian'
+                      ? 'Uraian / Essay'
+                      : 'Pilihan Ganda'}
+                  </span>
                 </div>
 
                 <button
@@ -645,42 +720,186 @@ export const StudentExam: React.FC<StudentExamProps> = ({
                 </button>
               </div>
 
-              {/* Question Content */}
+              {/* Question Stimulus Image if Attached */}
+              {currentQ?.imageUrl && (
+                <div className="mb-5 bg-slate-900/60 p-3 rounded-2xl border border-slate-700/80 inline-block max-w-lg">
+                  <img
+                    src={currentQ.imageUrl}
+                    alt={`Stimulus Ilustrasi Soal No. ${currentIndex + 1}`}
+                    className="max-h-56 sm:max-h-64 w-auto object-contain rounded-xl shadow-md cursor-pointer hover:opacity-95"
+                    onClick={() => window.open(currentQ.imageUrl, '_blank')}
+                    title="Buka gambar penuh"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5 italic">
+                    💡 Perhatikan gambar stimulus di atas untuk menjawab soal.
+                  </p>
+                </div>
+              )}
+
+              {/* Question Text */}
               <div className="text-base sm:text-lg font-medium text-slate-100 leading-relaxed mb-6 whitespace-pre-line">
                 {currentQ?.question}
               </div>
 
-              {/* Multiple Choice Options (A, B, C, D) */}
+              {/* Dynamic Answer Inputs based on Question Type */}
               <div className="space-y-3 flex-1">
-                {(['a', 'b', 'c', 'd'] as const).map((key) => {
-                  const isSelected = currentQ && answers[currentQ.id] === key;
-                  const optionText = currentQ?.options[key];
+                {/* 1. Pilihan Ganda Kompleks (Multi Checkbox) */}
+                {currentQ?.questionType === 'pilihan_ganda_kompleks' ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-indigo-300 font-semibold mb-2">
+                      ☑️ Anda dapat memilih lebih dari satu jawaban yang benar:
+                    </p>
+                    {(['a', 'b', 'c', 'd'] as const).map((key) => {
+                      const selectedKeys = (answers[currentQ.id] || '').split(',').map((s) => s.trim());
+                      const isSelected = selectedKeys.includes(key);
+                      const optionText = currentQ?.options[key];
 
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => handleSelectOption(key)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all flex items-start space-x-3.5 ${
-                        isSelected
-                          ? 'bg-blue-600/20 border-blue-500 text-white ring-2 ring-blue-500/50 shadow-md'
-                          : 'bg-slate-800/60 border-slate-700 text-slate-200 hover:bg-slate-700/50 hover:border-slate-600'
-                      }`}
-                    >
-                      <span
-                        className={`w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center font-bold text-xs uppercase transition-all ${
-                          isSelected
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-300'
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => handleToggleComplexOption(key)}
+                          className={`w-full text-left p-4 rounded-xl border transition-all flex items-start space-x-3.5 ${
+                            isSelected
+                              ? 'bg-indigo-600/25 border-indigo-500 text-white ring-2 ring-indigo-500/50 shadow-md'
+                              : 'bg-slate-800/60 border-slate-700 text-slate-200 hover:bg-slate-700/50 hover:border-slate-600'
+                          }`}
+                        >
+                          <span
+                            className={`w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center font-bold text-xs uppercase transition-all ${
+                              isSelected
+                                ? 'bg-indigo-500 text-white'
+                                : 'bg-slate-700 text-slate-300'
+                            }`}
+                          >
+                            {isSelected ? '✓' : key}
+                          </span>
+                          <span className="text-sm sm:text-base leading-relaxed pt-0.5">
+                            {optionText}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : currentQ?.questionType === 'benar_salah' ? (
+                  /* 2. Benar / Salah */
+                  <div className="space-y-3">
+                    <p className="text-xs text-blue-300 font-semibold mb-2">
+                      ⚖️ Tentukan apakah pernyataan di atas Benar atau Salah:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectOption('a')}
+                        className={`p-5 rounded-2xl border text-left transition-all flex items-center space-x-4 ${
+                          answers[currentQ.id] === 'a'
+                            ? 'bg-emerald-600/30 border-emerald-500 text-white ring-2 ring-emerald-500/50 shadow-lg'
+                            : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-700/60'
                         }`}
                       >
-                        {key}
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm ${
+                          answers[currentQ.id] === 'a' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'
+                        }`}>
+                          A
+                        </span>
+                        <div>
+                          <p className="font-bold text-base text-white">BENAR</p>
+                          <span className="text-xs text-slate-400">{currentQ.options.a || 'Pernyataan Sesuai / Benar'}</span>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectOption('b')}
+                        className={`p-5 rounded-2xl border text-left transition-all flex items-center space-x-4 ${
+                          answers[currentQ.id] === 'b'
+                            ? 'bg-rose-600/30 border-rose-500 text-white ring-2 ring-rose-500/50 shadow-lg'
+                            : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-700/60'
+                        }`}
+                      >
+                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm ${
+                          answers[currentQ.id] === 'b' ? 'bg-rose-500 text-white' : 'bg-slate-700 text-slate-300'
+                        }`}>
+                          B
+                        </span>
+                        <div>
+                          <p className="font-bold text-base text-white">SALAH</p>
+                          <span className="text-xs text-slate-400">{currentQ.options.b || 'Pernyataan Tidak Sesuai / Salah'}</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                ) : currentQ?.questionType === 'isian_singkat' ? (
+                  /* 3. Isian Singkat */
+                  <div className="space-y-3">
+                    <label className="text-xs text-slate-300 font-semibold block">
+                      ✍️ Tuliskan jawaban singkat Anda:
+                    </label>
+                    <input
+                      type="text"
+                      value={answers[currentQ.id] || ''}
+                      onChange={(e) => handleTextAnswer(e.target.value)}
+                      placeholder="Ketik jawaban singkat di sini..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm sm:text-base outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Gunakan ejaan yang tepat sesuai istilah yang dipelajari.
+                    </p>
+                  </div>
+                ) : currentQ?.questionType === 'uraian' ? (
+                  /* 4. Uraian / Essay */
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-300 font-semibold block">
+                        📝 Tuliskan uraian lengkap penjelasan Anda:
+                      </label>
+                      <span className="text-[11px] text-slate-400">
+                        {(answers[currentQ.id] || '').length} karakter
                       </span>
-                      <span className="text-sm sm:text-base leading-relaxed pt-0.5">
-                        {optionText}
-                      </span>
-                    </button>
-                  );
-                })}
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={answers[currentQ.id] || ''}
+                      onChange={(e) => handleTextAnswer(e.target.value)}
+                      placeholder="Uraikan jawaban, argumen, atau langkah penyelesaian secara runtut..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                ) : (
+                  /* 5. Standard Pilihan Ganda (A, B, C, D) */
+                  <div className="space-y-3">
+                    {(['a', 'b', 'c', 'd'] as const).map((key) => {
+                      const isSelected = currentQ && answers[currentQ.id] === key;
+                      const optionText = currentQ?.options[key];
+
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => handleSelectOption(key)}
+                          className={`w-full text-left p-4 rounded-xl border transition-all flex items-start space-x-3.5 ${
+                            isSelected
+                              ? 'bg-blue-600/20 border-blue-500 text-white ring-2 ring-blue-500/50 shadow-md'
+                              : 'bg-slate-800/60 border-slate-700 text-slate-200 hover:bg-slate-700/50 hover:border-slate-600'
+                          }`}
+                        >
+                          <span
+                            className={`w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center font-bold text-xs uppercase transition-all ${
+                              isSelected
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-slate-700 text-slate-300'
+                            }`}
+                          >
+                            {key}
+                          </span>
+                          <span className="text-sm sm:text-base leading-relaxed pt-0.5">
+                            {optionText}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Bottom Navigation Buttons */}
@@ -751,7 +970,9 @@ export const StudentExam: React.FC<StudentExamProps> = ({
                   >
                     <span>{idx + 1}</span>
                     {ans && !doubt && (
-                      <span className="text-[9px] uppercase leading-none opacity-80">{ans}</span>
+                      <span className="text-[9px] uppercase leading-none opacity-80">
+                        {ans.length > 2 ? '✓' : ans}
+                      </span>
                     )}
                   </button>
                 );

@@ -3,21 +3,24 @@ import { Navbar } from './components/Navbar';
 import { StudentExam } from './components/StudentExam';
 import { RealtimeMonitoring } from './components/RealtimeMonitoring';
 import { ExamManager } from './components/ExamManager';
+import { QuestionHistoryView } from './components/QuestionHistoryView';
+import { StudentManager } from './components/StudentManager';
 import { PrintExamView } from './components/PrintExamView';
 import { ResultsTable } from './components/ResultsTable';
 import { GASCodeViewer } from './components/GASCodeViewer';
-import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult } from './types';
-import { initialExams, initialStudents, initialSchoolSettings } from './initialData';
+import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, SavedQuestionPackage, ExamType } from './types';
+import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages } from './initialData';
 
 export default function App() {
   // Mode: 'siswa' or 'admin'
   const [currentMode, setCurrentMode] = useState<'siswa' | 'admin'>('siswa');
-  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'cetak' | 'rekap' | 'gas'>('monitoring');
+  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas'>('monitoring');
 
   // Core Data State
   const [exams, setExams] = useState<Exam[]>(initialExams);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(initialSchoolSettings);
+  const [savedPackages, setSavedPackages] = useState<SavedQuestionPackage[]>(initialSavedPackages);
   const [monitoringList, setMonitoringList] = useState<MonitoringStudent[]>([]);
   const [resultsList, setResultsList] = useState<ExamResult[]>([]);
   const [selectedPrintExam, setSelectedPrintExam] = useState<Exam | null>(null);
@@ -46,6 +49,7 @@ export default function App() {
         if (data.exams && data.exams.length > 0) setExams(data.exams);
         if (data.students && data.students.length > 0) setStudents(data.students);
         if (data.schoolSettings) setSchoolSettings(data.schoolSettings);
+        if (data.savedPackages && data.savedPackages.length > 0) setSavedPackages(data.savedPackages);
         if (data.monitoring) setMonitoringList(data.monitoring);
         if (data.results) setResultsList(data.results);
       }
@@ -77,6 +81,137 @@ export default function App() {
     }
   };
 
+  // Handle Deploy Question Package
+  const handleDeployPackage = async (
+    pkg: SavedQuestionPackage,
+    config: { token: string; code: string; duration: number; title: string; examType: ExamType }
+  ) => {
+    try {
+      const res = await fetch('/api/question-history/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packageId: pkg.id,
+          code: config.code,
+          token: config.token,
+          durationMinutes: config.duration,
+          title: config.title,
+          examType: config.examType,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Gagal mendeploy paket soal.');
+      }
+
+      const data = await res.json();
+      if (data.exam) {
+        setExams((prev) => [data.exam, ...prev.filter((e) => e.id !== data.exam.id)]);
+      }
+
+      // Mark deployed in savedPackages
+      setSavedPackages((prev) =>
+        prev.map((p) =>
+          p.id === pkg.id
+            ? { ...p, isDeployed: true, deployedExamId: data.exam?.id, deployedExamCode: data.exam?.code }
+            : p
+        )
+      );
+    } catch (err) {
+      console.error('Failed to deploy package:', err);
+      throw err;
+    }
+  };
+
+  // Handle Delete Question Package
+  const handleDeletePackage = async (id: string) => {
+    try {
+      await fetch(`/api/question-history/${id}`, { method: 'DELETE' });
+      setSavedPackages((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Failed to delete question package:', err);
+      throw err;
+    }
+  };
+
+  // Handle Student CRUD
+  const handleAddStudent = async (student: Student) => {
+    try {
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: student.name,
+          nisn: student.nisn,
+          className: student.class,
+          gender: student.gender,
+          noAbsen: student.noAbsen,
+          status: student.status,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.student) {
+          setStudents((prev) => [...prev, data.student]);
+        }
+      } else {
+        setStudents((prev) => [...prev, student]);
+      }
+    } catch (err) {
+      setStudents((prev) => [...prev, student]);
+    }
+  };
+
+  const handleUpdateStudent = async (student: Student) => {
+    try {
+      await fetch(`/api/students/${student.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: student.name,
+          nisn: student.nisn,
+          className: student.class,
+          gender: student.gender,
+          noAbsen: student.noAbsen,
+          status: student.status,
+        }),
+      });
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? student : s)));
+    } catch (err) {
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? student : s)));
+    }
+  };
+
+  const handleDeleteStudent = async (id: string) => {
+    try {
+      await fetch(`/api/students/${id}`, { method: 'DELETE' });
+      setStudents((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      setStudents((prev) => prev.filter((s) => s.id !== id));
+    }
+  };
+
+  const handleBulkAddStudents = async (newStudents: Student[]) => {
+    try {
+      const res = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: newStudents }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.students) {
+          setStudents((prev) => [...prev, ...data.students]);
+        }
+      } else {
+        setStudents((prev) => [...prev, ...newStudents]);
+      }
+    } catch (err) {
+      setStudents((prev) => [...prev, ...newStudents]);
+    }
+  };
+
   // Handle Exam submission from student
   const handleExamSubmitted = (newResult: ExamResult) => {
     setResultsList((prev) => [newResult, ...prev]);
@@ -96,6 +231,8 @@ export default function App() {
         setAdminTab={setAdminTab}
         schoolName={schoolSettings.namaSekolah}
         activeViolationsCount={activeViolationsCount}
+        savedPackagesCount={savedPackages.length}
+        studentsCount={students.length}
       />
 
       {/* Main Content Area */}
@@ -125,6 +262,29 @@ export default function App() {
                   setSelectedPrintExam(ex);
                   setAdminTab('cetak');
                 }}
+              />
+            )}
+
+            {adminTab === 'riwayat-soal' && (
+              <QuestionHistoryView
+                packages={savedPackages}
+                onDeployPackage={handleDeployPackage}
+                onDeletePackage={handleDeletePackage}
+                onSelectPrintExam={(ex) => {
+                  setSelectedPrintExam(ex);
+                  setAdminTab('cetak');
+                }}
+                onNavigateToAI={() => setAdminTab('bank-soal')}
+              />
+            )}
+
+            {adminTab === 'data-siswa' && (
+              <StudentManager
+                students={students}
+                onAddStudent={handleAddStudent}
+                onUpdateStudent={handleUpdateStudent}
+                onDeleteStudent={handleDeleteStudent}
+                onBulkAddStudents={handleBulkAddStudents}
               />
             )}
 

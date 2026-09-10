@@ -1,13 +1,15 @@
 import React from 'react';
-import { ShieldAlert, BookOpen, GraduationCap, Users, Sparkles, Printer, FileCode2, BarChart2 } from 'lucide-react';
+import { ShieldAlert, BookOpen, GraduationCap, Users, Sparkles, Printer, FileCode2, BarChart2, Archive, UserCheck } from 'lucide-react';
 
 interface NavbarProps {
   currentMode: 'siswa' | 'admin';
   setMode: (mode: 'siswa' | 'admin') => void;
-  adminTab: 'monitoring' | 'bank-soal' | 'cetak' | 'rekap' | 'gas';
-  setAdminTab: (tab: 'monitoring' | 'bank-soal' | 'cetak' | 'rekap' | 'gas') => void;
+  adminTab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas';
+  setAdminTab: (tab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas') => void;
   schoolName: string;
   activeViolationsCount?: number;
+  savedPackagesCount?: number;
+  studentsCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -17,6 +19,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setAdminTab,
   schoolName,
   activeViolationsCount = 0,
+  savedPackagesCount = 0,
+  studentsCount = 0,
 }) => {
   return (
     <header className="no-print bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40">
@@ -111,6 +115,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             <button
+              onClick={() => setAdminTab('riwayat-soal')}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors font-medium ${
+                adminTab === 'riwayat-soal'
+                  ? 'bg-slate-800 text-blue-400 border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Riwayat & Deploy Soal</span>
+              {savedPackagesCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 text-[10px] font-bold bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+                  {savedPackagesCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setAdminTab('data-siswa')}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors font-medium ${
+                adminTab === 'data-siswa'
+                  ? 'bg-slate-800 text-blue-400 border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Data Siswa</span>
+              {studentsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 text-[10px] font-bold bg-cyan-500/20 text-cyan-300 rounded-full border border-cyan-500/30">
+                  {studentsCount}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setAdminTab('cetak')}
               className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors font-medium ${
                 adminTab === 'cetak'
@@ -143,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <FileCode2 className="w-3.5 h-3.5 text-orange-400" />
-              <span>Kode GAS (Google Apps Script)</span>
+              <span>Kode GAS</span>
             </button>
           </div>
         )}
@@ -151,3 +189,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

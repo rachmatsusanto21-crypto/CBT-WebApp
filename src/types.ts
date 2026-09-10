@@ -1,14 +1,31 @@
+export type QuestionType =
+  | 'pilihan_ganda'
+  | 'pilihan_ganda_kompleks'
+  | 'benar_salah'
+  | 'isian_singkat'
+  | 'uraian';
+
+export type ExamType =
+  | 'Penilaian Akhir Bab'
+  | 'Penilaian Tengah Semester'
+  | 'Asesmen Akhir Semester'
+  | 'Ulangan Harian';
+
 export interface Question {
   id: string;
   number: number;
   question: string;
+  questionType?: QuestionType;
+  imageUrl?: string;
   options: {
     a: string;
     b: string;
     c: string;
     d: string;
+    e?: string;
   };
-  correctAnswer: 'a' | 'b' | 'c' | 'd';
+  correctAnswer: string; // 'a'|'b'|'c'|'d' or 'benar'|'salah' or short answer
+  correctAnswers?: string[]; // For pilihan_ganda_kompleks: e.g. ['a', 'c']
   explanation: string;
   category?: string;
 }
@@ -19,6 +36,7 @@ export interface Exam {
   title: string;
   subject: string;
   grade: string;
+  examType?: ExamType;
   token: string;
   durationMinutes: number;
   questions: Question[];
@@ -26,11 +44,30 @@ export interface Exam {
   createdAt: string;
 }
 
+export interface SavedQuestionPackage {
+  id: string;
+  title: string;
+  subject: string;
+  grade: string;
+  examType: ExamType;
+  topic: string;
+  difficulty: string;
+  questionCount: number;
+  questionType: QuestionType | 'campuran';
+  questions: Question[];
+  savedAt: string;
+  isDeployed?: boolean;
+  deployedExamCode?: string;
+}
+
 export interface Student {
   id: string;
   nisn: string;
   name: string;
   class: string;
+  noAbsen?: number;
+  gender?: 'L' | 'P';
+  status?: 'Aktif' | 'Non-Aktif';
 }
 
 export interface ViolationLog {
@@ -89,3 +126,4 @@ export interface SchoolSettings {
   tahunAjaran: string;
   semester: string;
 }
+
