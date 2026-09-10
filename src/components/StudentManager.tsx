@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Student } from '../types';
 import { CLASS_ROSTER_OPTIONS } from '../initialData';
+import { safeFetchJson } from '../utils/apiHelper';
 
 interface StudentManagerProps {
   students: Student[];
@@ -215,7 +216,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         status: editForm.status,
       };
 
-      const res = await fetch(`/api/students/${editingStudent.id}`, {
+      const { ok, data } = await safeFetchJson(`/api/students/${editingStudent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -228,13 +229,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.student) {
-          onUpdateStudent(data.student);
-        } else {
-          onUpdateStudent(updated);
-        }
+      if (ok && data?.student) {
+        onUpdateStudent(data.student);
       } else {
         onUpdateStudent(updated);
       }
@@ -267,7 +263,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     try {
       if (deleteModal.isBulk) {
         // Bulk delete
-        await fetch('/api/students/bulk-delete', {
+        await safeFetchJson('/api/students/bulk-delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: deleteModal.ids }),
@@ -292,7 +288,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         const idToDelete = deleteModal.ids[0];
         const nameToDelete = deleteModal.names[0];
 
-        await fetch(`/api/students/${idToDelete}`, { method: 'DELETE' });
+        await safeFetchJson(`/api/students/${idToDelete}`, { method: 'DELETE' });
         onDeleteStudent(idToDelete);
 
         setSelectedIds((prev) => {
@@ -335,14 +331,13 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         status: formData.status,
       };
 
-      const res = await fetch('/api/students', {
+      const { ok, data, error } = await safeFetchJson('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (data.success && data.student) {
+      if (ok && data?.success && data?.student) {
         onAddStudent(data.student);
         setFeedback({ type: 'success', text: `Siswa "${data.student.name}" berhasil ditambahkan!` });
         setFormData({
@@ -355,7 +350,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         });
         setIsAdding(false);
       } else {
-        throw new Error(data.error || 'Gagal menyimpan siswa');
+        throw new Error(error || data?.error || 'Gagal menyimpan siswa');
       }
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.message || 'Gagal menambahkan siswa' });
@@ -400,20 +395,19 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     }
 
     try {
-      const res = await fetch('/api/students/bulk', {
+      const { ok, data, error } = await safeFetchJson('/api/students/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ students: parsedList }),
       });
 
-      const data = await res.json();
-      if (data.success && data.students) {
+      if (ok && data?.success && data?.students) {
         onBulkAddStudents(data.students);
         setFeedback({ type: 'success', text: `Berhasil mengimpor ${data.count} siswa sekaligus!` });
         setIsBulkOpen(false);
         setBulkText('');
       } else {
-        throw new Error(data.error || 'Gagal impor data');
+        throw new Error(error || data?.error || 'Gagal impor data');
       }
     } catch (err: any) {
       setBulkError(err.message || 'Terjadi kesalahan saat memproses data massal');

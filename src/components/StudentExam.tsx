@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Student, Exam, ExamResult, Question, SchoolSettings } from '../types';
 import { Letterhead } from './Letterhead';
+import { safeFetchJson } from '../utils/apiHelper';
 
 interface StudentExamProps {
   students: Student[];
@@ -101,7 +102,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
         onViolationOccurred();
 
         try {
-          await fetch('/api/monitoring/violation', {
+          await safeFetchJson('/api/monitoring/violation', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -130,7 +131,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
         onViolationOccurred();
 
         try {
-          await fetch('/api/monitoring/violation', {
+          await safeFetchJson('/api/monitoring/violation', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -170,7 +171,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
       const progress = total > 0 ? (answered / total) * 100 : 0;
 
       try {
-        await fetch('/api/monitoring/ping', {
+        await safeFetchJson('/api/monitoring/ping', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -425,13 +426,12 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     };
 
     try {
-      const res = await fetch('/api/submit-exam', {
+      const { ok, data } = await safeFetchJson('/api/submit-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (data.success && data.result) {
+      if (ok && data?.success && data?.result) {
         setExamResult(data.result);
         onExamSubmitted(data.result);
 
@@ -441,6 +441,8 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           spread: 70,
           origin: { y: 0.6 },
         });
+      } else {
+        throw new Error(data?.error || 'Gagal menyimpan hasil ke server');
       }
     } catch (err) {
       console.error('Submit error:', err);

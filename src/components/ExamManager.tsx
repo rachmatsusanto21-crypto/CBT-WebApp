@@ -23,6 +23,7 @@ import {
   Award
 } from 'lucide-react';
 import { Exam, Question, QuestionType, ExamType, SavedQuestionPackage } from '../types';
+import { safeFetchJson } from '../utils/apiHelper';
 import {
   SUBJECT_OPTIONS,
   EXAM_TYPE_OPTIONS,
@@ -111,7 +112,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setSaveSuccessMessage('');
 
     try {
-      const res = await fetch('/api/gemini/generate-questions', {
+      const { ok, data, error } = await safeFetchJson('/api/gemini/generate-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -125,9 +126,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Gagal memanggil Gemini AI');
+      if (!ok || !data || !data.success) {
+        throw new Error(error || data?.error || 'Gagal memanggil Gemini AI');
       }
 
       setPreviewQuestions(data.questions);
@@ -169,22 +169,23 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      const res = await fetch('/api/exams', {
+      const { ok, data, error } = await safeFetchJson('/api/exams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newExam),
       });
 
-      const data = await res.json();
-      if (data.success && data.exam) {
+      if (ok && data?.success && data?.exam) {
         onExamCreated(data.exam);
         setSaveSuccessMessage(
           `Berhasil mendeploy paket ujian ${newExam.code}! Siswa dapat login menggunakan token "${newExam.token}".`
         );
         setPreviewQuestions(null);
+      } else {
+        throw new Error(error || 'Gagal mendeploy paket soal.');
       }
     } catch (err: any) {
-      setGenError('Gagal mendeploy paket soal.');
+      setGenError(err.message || 'Gagal mendeploy paket soal.');
     } finally {
       setIsSaving(false);
     }
@@ -206,21 +207,20 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         questions: previewQuestions,
       };
 
-      const res = await fetch('/api/question-history', {
+      const { ok, data, error } = await safeFetchJson('/api/question-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (data.success && data.package) {
+      if (ok && data?.success && data?.package) {
         if (onSaveToHistory) onSaveToHistory(data.package);
         setSaveSuccessMessage(
           `Paket soal berhasil disimpan ke dalam Riwayat Soal! Anda dapat mendeploy soal ini kapan saja.`
         );
         setPreviewQuestions(null);
       } else {
-        throw new Error(data.error || 'Gagal menyimpan ke riwayat');
+        throw new Error(error || data?.error || 'Gagal menyimpan ke riwayat');
       }
     } catch (err: any) {
       setGenError(err.message || 'Gagal menyimpan paket soal ke riwayat.');

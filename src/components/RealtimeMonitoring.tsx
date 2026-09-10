@@ -14,6 +14,7 @@ import {
   Filter
 } from 'lucide-react';
 import { MonitoringStudent, ViolationLog } from '../types';
+import { safeFetchJson } from '../utils/apiHelper';
 
 interface RealtimeMonitoringProps {
   initialStudents: MonitoringStudent[];
@@ -35,13 +36,12 @@ export const RealtimeMonitoring: React.FC<RealtimeMonitoringProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // Poll backend monitoring data
+  // Poll backend monitoring data safely
   const fetchMonitoringData = async () => {
     try {
       setIsRefreshing(true);
-      const res = await fetch('/api/monitoring');
-      const data = await res.json();
-      if (data.students) {
+      const { ok, data } = await safeFetchJson('/api/monitoring');
+      if (ok && data?.students) {
         setStudents(data.students);
       }
     } catch (err) {
@@ -55,7 +55,7 @@ export const RealtimeMonitoring: React.FC<RealtimeMonitoringProps> = ({
     fetchMonitoringData();
 
     if (!isAutoRefresh) return;
-    const interval = setInterval(fetchMonitoringData, 3000);
+    const interval = setInterval(fetchMonitoringData, 4000);
     return () => clearInterval(interval);
   }, [isAutoRefresh]);
 
@@ -69,12 +69,12 @@ export const RealtimeMonitoring: React.FC<RealtimeMonitoringProps> = ({
   // Reset student status action
   const handleResetStudentStatus = async (studentName: string, examCode: string) => {
     try {
-      const res = await fetch('/api/monitoring/reset', {
+      const { ok } = await safeFetchJson('/api/monitoring/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentName, examCode }),
       });
-      if (res.ok) {
+      if (ok) {
         fetchMonitoringData();
       }
     } catch (err) {
@@ -89,7 +89,7 @@ export const RealtimeMonitoring: React.FC<RealtimeMonitoringProps> = ({
     const randomProgress = Math.floor(Math.random() * 80) + 15;
 
     try {
-      await fetch('/api/monitoring/ping', {
+      await safeFetchJson('/api/monitoring/ping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,7 +103,7 @@ export const RealtimeMonitoring: React.FC<RealtimeMonitoringProps> = ({
       });
 
       if (Math.random() > 0.5) {
-        await fetch('/api/monitoring/violation', {
+        await safeFetchJson('/api/monitoring/violation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

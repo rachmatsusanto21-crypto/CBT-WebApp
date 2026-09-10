@@ -10,6 +10,7 @@ import { ResultsTable } from './components/ResultsTable';
 import { GASCodeViewer } from './components/GASCodeViewer';
 import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, SavedQuestionPackage, ExamType } from './types';
 import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages } from './initialData';
+import { safeFetchJson } from './utils/apiHelper';
 
 export default function App() {
   // Mode: 'siswa' or 'admin'
@@ -41,12 +42,11 @@ export default function App() {
     }
   }, []);
 
-  // Fetch initial state from Express server
+  // Fetch initial state from Express server safely
   const loadInitialData = async () => {
     try {
-      const res = await fetch('/api/initial-state');
-      if (res.ok) {
-        const data = await res.json();
+      const { ok, data } = await safeFetchJson('/api/initial-state');
+      if (ok && data) {
         if (data.exams && data.exams.length > 0) setExams(data.exams);
         if (data.students && data.students.length > 0) setStudents(data.students);
         if (data.schoolSettings) setSchoolSettings(data.schoolSettings);
@@ -72,7 +72,7 @@ export default function App() {
   const handleUpdateSettings = async (newSettings: SchoolSettings) => {
     setSchoolSettings(newSettings);
     try {
-      await fetch('/api/settings', {
+      await safeFetchJson('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings),
@@ -88,7 +88,7 @@ export default function App() {
     config: { token: string; code: string; duration: number; title: string; examType: ExamType }
   ) => {
     try {
-      const res = await fetch('/api/question-history/deploy', {
+      const { ok, data, error } = await safeFetchJson('/api/question-history/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,12 +101,10 @@ export default function App() {
         }),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Gagal mendeploy paket soal.');
+      if (!ok || !data) {
+        throw new Error(error || 'Gagal mendeploy paket soal.');
       }
 
-      const data = await res.json();
       if (data.exam) {
         setExams((prev) => [data.exam, ...prev.filter((e) => e.id !== data.exam.id)]);
       }
@@ -128,7 +126,7 @@ export default function App() {
   // Handle Delete Question Package
   const handleDeletePackage = async (id: string) => {
     try {
-      await fetch(`/api/question-history/${id}`, { method: 'DELETE' });
+      await safeFetchJson(`/api/question-history/${id}`, { method: 'DELETE' });
       setSavedPackages((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
       console.error('Failed to delete question package:', err);
@@ -139,7 +137,7 @@ export default function App() {
   // Handle Student CRUD
   const handleAddStudent = async (student: Student) => {
     try {
-      const res = await fetch('/api/students', {
+      const { ok, data } = await safeFetchJson('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,11 +149,8 @@ export default function App() {
           status: student.status,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.student) {
-          setStudents((prev) => [...prev, data.student]);
-        }
+      if (ok && data?.student) {
+        setStudents((prev) => [...prev, data.student]);
       } else {
         setStudents((prev) => [...prev, student]);
       }
@@ -166,7 +161,7 @@ export default function App() {
 
   const handleUpdateStudent = async (student: Student) => {
     try {
-      await fetch(`/api/students/${student.id}`, {
+      await safeFetchJson(`/api/students/${student.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,7 +181,7 @@ export default function App() {
 
   const handleDeleteStudent = async (id: string) => {
     try {
-      await fetch(`/api/students/${id}`, { method: 'DELETE' });
+      await safeFetchJson(`/api/students/${id}`, { method: 'DELETE' });
       setStudents((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
       setStudents((prev) => prev.filter((s) => s.id !== id));
@@ -195,16 +190,13 @@ export default function App() {
 
   const handleBulkAddStudents = async (newStudents: Student[]) => {
     try {
-      const res = await fetch('/api/students/bulk', {
+      const { ok, data } = await safeFetchJson('/api/students/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ students: newStudents }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.students) {
-          setStudents((prev) => [...prev, ...data.students]);
-        }
+      if (ok && data?.students) {
+        setStudents((prev) => [...prev, ...data.students]);
       } else {
         setStudents((prev) => [...prev, ...newStudents]);
       }
