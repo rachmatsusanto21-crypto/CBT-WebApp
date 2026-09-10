@@ -1,0 +1,6 @@
+{
+  "name": "CBT Web App Sekolah",
+  "description": "Aplikasi Ujian Online Pintar dengan Anti-Cheat, AI Gemini Soal & Remedial, Monitoring Realtime, dan Cetak Kop Surat Otomatis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

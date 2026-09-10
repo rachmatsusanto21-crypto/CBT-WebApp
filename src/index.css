@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Indonesian Official Letterhead double-line */
+  .kop-border {
+    border-bottom: 3px double #000;
+  }
+}
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Times New Roman', Times, serif, system-ui;
+    font-size: 12pt;
+    line-height: 1.35;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Hide web app UI navigation, tabs, action buttons when printing */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Show print-only paper containers */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Clean print paper page */
+  .print-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm 15mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: auto;
+  }
+
+  .print-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm 15mm 15mm;
+  }
+}
