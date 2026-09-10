@@ -543,23 +543,39 @@ app.post("/api/gemini/generate-questions", async (req, res) => {
       typeGuideline = `Variasikan butir soal dengan proporsi: sebagian Pilihan Ganda (PG), sebagian Benar/Salah, dan sebagian Isian Singkat.`;
     }
 
-    const prompt = `Anda adalah pembuat soal ujian profesional standar Kurikulum Merdeka Indonesia dan Asesmen Nasional.
-Tugas Anda adalah merumuskan ${safeCount} butir naskah soal berkualitas tinggi dan bebas ambigu untuk:
+    const prompt = `Anda adalah pakar pembuat instrumen asesmen dan kisi-kisi naskah ujian standar Kurikulum Merdeka Indonesia dan Taksonomi Bloom & Anderson.
+Tugas Anda adalah merumuskan butir naskah soal berkualitas tinggi, teruji, dan valid untuk:
 - Jenis Ujian: ${examType}
 - Mata Pelajaran: ${subject}
-- Jenjang / Kelas: ${grade || "SMA/SMK"}
-- Topik / Materi: ${topic}
+- Jenjang / Tingkat Kelas: ${grade || "Semua Jenjang (SD, SMP, atau SMA/SMK)"}
+- Topik / Instruksi Pembagian Bentuk Soal: ${topic}
 - Tingkat Kesulitan: ${difficulty}
-- Bentuk Soal: ${questionType}
+- Pilihan Bentuk Soal Awal: ${questionType}
+- Target Total Butir: ${safeCount} soal
 
-Pedoman Bentuk Soal:
-${typeGuideline}
+PANDUAN MULTI BENTUK SOAL:
+1. Analisis teks Topik/Instruksi pengguna. Jika pengguna menentukan jumlah per bentuk soal secara spesifik (misalnya: "10 soal pilihan ganda, 10 isian pendek, dan 5 soal uraian" atau proporsi sejenis), PRIORITASKAN DAN PATUHI PERSIS pembagian bentuk soal dan jumlah butir tersebut!
+2. Jika bentuk soal dipilih "campuran" dan tidak ada instruksi khusus di topik, buatlah komposisi proporsional: 60% pilihan_ganda, 20% isian_singkat, dan 20% uraian.
+3. Jenis bentuk soal yang valid untuk field 'questionType': 'pilihan_ganda', 'isian_singkat', 'uraian', 'pilihan_ganda_kompleks', atau 'benar_salah'.
 
-Ketentuan Khusus:
-1. Soal harus relevan secara kontekstual dengan materi ${subject} di Indonesia.
-2. Hindari soal yang membingungkan; buat stimulus bacaan/kasus jika relevan.
-3. Berikan pembahasan (explanation) konsep edukatif yang jelas untuk setiap soal.
-4. Kembalikan HANYA JSON array sesuai skema yang ditentukan tanpa teks tambahan.`;
+PANDUAN TAKSONOMI BLOOM & ANDERSON (C1 - C6):
+- Setiap butir soal WAJIB ditentukan level kognitifnya:
+  * C1 (Mengingat/Remembering): menyebutkan, mengidentifikasi fakta/istilah.
+  * C2 (Memahami/Understanding): menjelaskan konsep, membedakan, merangkum.
+  * C3 (Menerapkan/Applying): menghitung, menerapkan rumus/aturan pada kasus baru.
+  * C4 (Menganalisis/Analyzing): menelaah data, grafik, memecah masalah, sebab-akibat.
+  * C5 (Mengevaluasi/Evaluating): menilai argumen, mengkritisi, memutuskan solusi terbaik.
+  * C6 (Mencipta/Creating): merancang solusi, merumuskan hipotesis, menyusun ide baru.
+- Berikan deskripsi level kognitif yang jelas pada field 'cognitiveDescription'.
+- Tuliskan indikator pencapaian kompetensi pada field 'competencyIndicator' untuk tabel kisi-kisi resmi.
+
+PANDUAN PENSKORAN & KATA KUNCI (KEYWORDS AI SCORING):
+- Untuk soal 'isian_singkat' dan 'uraian', WAJIB sertakan 2 sampai 6 kata kunci penting (field 'keywords') yang wajib ada dalam jawaban siswa agar sistem CBT dapat melakukan penskoran otomatis berbasis kecocokan kata kunci!
+- Berikan bobot skor (field 'scoreWeight'): standar pilihan ganda = 1, isian singkat = 2, uraian = 4 atau 5.
+- Berikan panduan rubrik penskoran pada field 'rubricGuide' untuk soal uraian/esai.
+
+Ketentuan Format Output:
+- Kembalikan HANYA JSON array sesuai responseSchema yang ditentukan tanpa teks pengantar atau markdown block.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.8-flash",
@@ -574,17 +590,42 @@ Ketentuan Khusus:
             properties: {
               question: {
                 type: Type.STRING,
-                description: "Teks pertanyaan lengkap beserta stimulus jika ada",
+                description: "Teks pertanyaan lengkap beserta stimulus narasi/kasus jika ada",
               },
               questionType: {
                 type: Type.STRING,
-                description: "Jenis bentuk soal: pilihan_ganda, pilihan_ganda_kompleks, benar_salah, isian_singkat, atau uraian",
+                description: "Jenis bentuk soal: pilihan_ganda, isian_singkat, uraian, pilihan_ganda_kompleks, atau benar_salah",
+              },
+              cognitiveLevel: {
+                type: Type.STRING,
+                description: "Tingkat kognitif Taksonomi Bloom & Anderson: C1, C2, C3, C4, C5, atau C6",
+              },
+              cognitiveDescription: {
+                type: Type.STRING,
+                description: "Deskripsi operasional level kognitif untuk dokumen kisi-kisi, contoh: C4 - Menganalisis hubungan sebab-akibat",
+              },
+              competencyIndicator: {
+                type: Type.STRING,
+                description: "Indikator soal resmi, contoh: Disajikan stimulus kasus, siswa mampu menentukan solusi pemecahan masalah",
+              },
+              scoreWeight: {
+                type: Type.NUMBER,
+                description: "Bobot skor maksimal butir soal (misal PG: 1, Isian: 2, Uraian: 4)",
+              },
+              keywords: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Daftar kata kunci esensial untuk penskoran otomatis AI pada soal isian dan uraian",
+              },
+              rubricGuide: {
+                type: Type.STRING,
+                description: "Pedoman dan rubrik penskoran untuk dokumen kisi-kisi",
               },
               options: {
                 type: Type.OBJECT,
                 properties: {
-                  a: { type: Type.STRING, description: "Opsi A atau Opsi Benar" },
-                  b: { type: Type.STRING, description: "Opsi B atau Opsi Salah" },
+                  a: { type: Type.STRING, description: "Opsi A" },
+                  b: { type: Type.STRING, description: "Opsi B" },
                   c: { type: Type.STRING, description: "Opsi C" },
                   d: { type: Type.STRING, description: "Opsi D" },
                 },
@@ -592,7 +633,7 @@ Ketentuan Khusus:
               },
               correctAnswer: {
                 type: Type.STRING,
-                description: "Kunci jawaban utama (a/b/c/d atau kata kunci singkat)",
+                description: "Kunci jawaban utama (a/b/c/d untuk PG/BS atau teks jawaban inti untuk isian/uraian)",
               },
               correctAnswers: {
                 type: Type.ARRAY,
@@ -601,14 +642,14 @@ Ketentuan Khusus:
               },
               explanation: {
                 type: Type.STRING,
-                description: "Pembahasan konsep penyelesaian atau rubrik yang benar",
+                description: "Pembahasan konsep edukatif lengkap",
               },
               category: {
                 type: Type.STRING,
-                description: "Subtopik materi",
+                description: "Materi pokok / subtopik",
               },
             },
-            required: ["question", "options", "correctAnswer", "explanation"],
+            required: ["question", "questionType", "options", "correctAnswer", "explanation", "cognitiveLevel"],
           },
         },
       },
@@ -633,22 +674,38 @@ Ketentuan Khusus:
     );
 
     const formattedQuestions: Question[] = questionsRaw.map((q, idx) => {
-      // Suggest image for the first or second question if subject matches
+      // Suggest image for the first question if subject matches
       const hasImage = matchingPreset && idx === 0;
+      const qType = (q.questionType as QuestionType) || (questionType !== "campuran" ? (questionType as QuestionType) : "pilihan_ganda");
+      
+      // Default score weight if not generated
+      let defaultWeight = 1;
+      if (qType === "uraian") defaultWeight = 4;
+      else if (qType === "isian_singkat") defaultWeight = 2;
+
+      const cLevel = q.cognitiveLevel ? q.cognitiveLevel.toUpperCase() : "C3";
 
       return {
         id: "q-gen-" + Date.now() + "-" + idx,
         number: idx + 1,
         question: q.question,
-        questionType: (q.questionType as QuestionType) || (questionType !== "campuran" ? (questionType as QuestionType) : "pilihan_ganda"),
+        questionType: qType,
         imageUrl: hasImage ? matchingPreset.url : undefined,
+        cognitiveLevel: cLevel,
+        cognitiveDescription: q.cognitiveDescription || `Level ${cLevel}`,
+        competencyIndicator: q.competencyIndicator || `Disajikan materi ${q.category || topic}, siswa mampu menyelesaikan soal terkait.`,
+        scoreWeight: q.scoreWeight && q.scoreWeight > 0 ? q.scoreWeight : defaultWeight,
+        keywords: Array.isArray(q.keywords) && q.keywords.length > 0 
+          ? q.keywords 
+          : (qType === "isian_singkat" ? [q.correctAnswer || ""] : undefined),
+        rubricGuide: q.rubricGuide || undefined,
         options: {
           a: q.options?.a || "",
           b: q.options?.b || "",
           c: q.options?.c || "",
           d: q.options?.d || "",
         },
-        correctAnswer: (q.correctAnswer || "a").toString().toLowerCase(),
+        correctAnswer: (q.correctAnswer || "a").toString().trim(),
         correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers.map((x: string) => x.toLowerCase()) : undefined,
         explanation: q.explanation || "",
         category: q.category || topic,

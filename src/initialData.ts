@@ -23,6 +23,138 @@ export const EXAM_TYPE_OPTIONS: ExamType[] = [
   'Ulangan Harian',
 ];
 
+// Opsi Jenjang Pendidikan & Tingkat Kelas Lengkap (SD, SMP, SMA/SMK)
+export const GRADE_LEVEL_OPTIONS = [
+  // Jenjang SD / MI
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 1 SD (Fase A)' },
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 2 SD (Fase A)' },
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 3 SD (Fase B)' },
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 4 SD (Fase B)' },
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 5 SD (Fase C)' },
+  { level: 'SD', group: 'Sekolah Dasar (SD / MI)', value: 'Kelas 6 SD (Fase C)' },
+  // Jenjang SMP / MTs
+  { level: 'SMP', group: 'Sekolah Menengah Pertama (SMP / MTs)', value: 'Kelas 7 SMP (Fase D)' },
+  { level: 'SMP', group: 'Sekolah Menengah Pertama (SMP / MTs)', value: 'Kelas 8 SMP (Fase D)' },
+  { level: 'SMP', group: 'Sekolah Menengah Pertama (SMP / MTs)', value: 'Kelas 9 SMP (Fase D)' },
+  // Jenjang SMA / MA / SMK
+  { level: 'SMA', group: 'Sekolah Menengah Atas (SMA / SMK / MA)', value: 'Kelas 10 SMA/SMK (Fase E)' },
+  { level: 'SMA', group: 'Sekolah Menengah Atas (SMA / SMK / MA)', value: 'Kelas 11 SMA/SMK (Fase F)' },
+  { level: 'SMA', group: 'Sekolah Menengah Atas (SMA / SMK / MA)', value: 'Kelas 12 SMA/SMK (Fase F)' },
+];
+
+// Opsi Rombongan Belajar / Kelas Siswa Standar (SD hingga SMA)
+export const CLASS_ROSTER_OPTIONS: { category: string; classes: string[] }[] = [
+  {
+    category: 'Tingkat SD (Kelas 1 - 6)',
+    classes: ['1-A', '1-B', '2-A', '2-B', '3-A', '3-B', '4-A', '4-B', '5-A', '5-B', '6-A', '6-B'],
+  },
+  {
+    category: 'Tingkat SMP (Kelas 7 - 9)',
+    classes: ['VII-A', 'VII-B', 'VII-C', 'VIII-A', 'VIII-B', 'VIII-C', 'IX-A', 'IX-B', 'IX-C'],
+  },
+  {
+    category: 'Tingkat SMA / SMK (Kelas 10 - 12)',
+    classes: [
+      'X-MIPA 1', 'X-MIPA 2', 'X-IPS 1', 'X-1', 'X-2',
+      'XI-MIPA 1', 'XI-MIPA 2', 'XI-IPS 1', 'XI-Bahasa',
+      'XII-MIPA 1', 'XII-MIPA 2', 'XII-IPS 1',
+    ],
+  },
+];
+
+// Taksonomi Bloom & Anderson (Level Kognitif)
+export const BLOOM_COGNITIVE_LEVELS = [
+  {
+    level: 'C1',
+    label: 'C1 - Mengingat (Remembering)',
+    desc: 'Mengingat fakta, definisi, istilah, atau konsep dasar tanpa mengubahnya.',
+    keywords: ['Sebutkan', 'Tuliskan', 'Definisikan', 'Siapakah', 'Di manakah'],
+    defaultWeight: 1,
+  },
+  {
+    level: 'C2',
+    label: 'C2 - Memahami (Understanding)',
+    desc: 'Menjelaskan ide atau konsep, menginterpretasi, dan meringkas makna stimulus.',
+    keywords: ['Jelaskan', 'Uraikan', 'Bandingkan', 'Klasifikasikan', 'Rangkum'],
+    defaultWeight: 1,
+  },
+  {
+    level: 'C3',
+    label: 'C3 - Menerapkan (Applying)',
+    desc: 'Menggunakan konsep, metode, atau rumus dalam situasi nyata atau soal hitungan.',
+    keywords: ['Hitunglah', 'Terapkan', 'Gunakan', 'Tentukan', 'Demonstrasikan'],
+    defaultWeight: 2,
+  },
+  {
+    level: 'C4',
+    label: 'C4 - Menganalisis (Analyzing)',
+    desc: 'Mengurai informasi ke dalam bagian-bagiannya, menemukan hubungan sebab-akibat.',
+    keywords: ['Analisislah', 'Hubungkan', 'Bedakan', 'Telaah', 'Mengapa demikian'],
+    defaultWeight: 3,
+  },
+  {
+    level: 'C5',
+    label: 'C5 - Mengevaluasi (Evaluating)',
+    desc: 'Membuat penilaian berdasarkan kriteria, memeriksa argumen, menguji hipotesis.',
+    keywords: ['Evaluasilah', 'Nilailah', 'Kritiklah', 'Buktikan', 'Beri pertimbangan'],
+    defaultWeight: 4,
+  },
+  {
+    level: 'C6',
+    label: 'C6 - Mencipta (Creating)',
+    desc: 'Menyusun bagian-bagian menjadi suatu pola baru, merancang solusi kreatif.',
+    keywords: ['Rancanglah', 'Ciptakan', 'Rumuskan', 'Susunlah solusi', 'Gagaslah'],
+    defaultWeight: 5,
+  },
+];
+
+// Preset Logo Pemerintah Daerah & Logo Satuan Pendidikan Resmi
+export const PEMDA_LOGO_PRESETS = [
+  {
+    name: 'Logo Garuda Pancasila (Nasional)',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg/400px-Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg.png',
+  },
+  {
+    name: 'Logo Tut Wuri Handayani (Kemendikbudristek)',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg/400px-Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg.png',
+  },
+  {
+    name: 'Pemerintah Provinsi DKI Jakarta',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Jakarta.svg/400px-Coat_of_arms_of_Jakarta.svg.png',
+  },
+  {
+    name: 'Pemerintah Provinsi Jawa Barat',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Coat_of_arms_of_West_Java.svg/400px-Coat_of_arms_of_West_Java.svg.png',
+  },
+  {
+    name: 'Pemerintah Provinsi Jawa Tengah',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Coat_of_arms_of_Central_Java.svg/400px-Coat_of_arms_of_Central_Java.svg.png',
+  },
+  {
+    name: 'Pemerintah Provinsi Jawa Timur',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Coat_of_arms_of_East_Java.svg/400px-Coat_of_arms_of_East_Java.svg.png',
+  },
+  {
+    name: 'Kementerian Agama RI (Madrasah)',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Kemenag_logo.png/400px-Kemenag_logo.png',
+  },
+];
+
+export const SCHOOL_LOGO_PRESETS = [
+  {
+    name: 'Logo Sekolah Tut Wuri Handayani',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg/400px-Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg.png',
+  },
+  {
+    name: 'Logo Madrasah Indonesia',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Kemenag_logo.png/400px-Kemenag_logo.png',
+  },
+  {
+    name: 'Logo Garuda Lambang Negara',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg/400px-Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg.png',
+  },
+];
+
 export const QUESTION_TYPE_OPTIONS: { id: QuestionType; label: string; description: string }[] = [
   { id: 'pilihan_ganda', label: 'Pilihan Ganda (PG)', description: 'Satu jawaban benar dengan 4 pilihan (A, B, C, D)' },
   { id: 'pilihan_ganda_kompleks', label: 'Pilihan Ganda Kompleks', description: 'Memilih lebih dari satu pernyataan / opsi benar' },
@@ -77,21 +209,28 @@ export const initialSchoolSettings: SchoolSettings = {
   teleponEmail: 'Telp: (021) 3865001 | Email: info@sman1teladan.sch.id | Website: cbt.sman1teladan.sch.id',
   kepalaSekolah: 'Drs. H. Mulyadi, M.Pd.',
   nipKepalaSekolah: '19720514 199802 1 003',
+  guruPengampu: 'Rachmat Susanto, S.Pd.',
+  nipGuruPengampu: '19850315 201001 1 012',
   tahunAjaran: '2025/2026',
   semester: 'Genap (Semester 2)',
+  logoPemdaUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Jakarta.svg/400px-Coat_of_arms_of_Jakarta.svg.png',
+  logoSekolahUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg/400px-Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg.png',
 };
 
 export const initialStudents: Student[] = [
-  { id: 'std-1', nisn: '0071829101', name: 'Ahmad Fauzi Pratama', class: 'X-MIPA 1' },
-  { id: 'std-2', nisn: '0071829102', name: 'Siti Nurhaliza Putri', class: 'X-MIPA 1' },
-  { id: 'std-3', nisn: '0071829103', name: 'Budi Santoso', class: 'X-MIPA 1' },
-  { id: 'std-4', nisn: '0071829104', name: 'Dewi Lestari Kusuma', class: 'X-MIPA 1' },
-  { id: 'std-5', nisn: '0071829105', name: 'Rizky Alamsyah', class: 'X-MIPA 1' },
-  { id: 'std-6', nisn: '0071829106', name: 'Nabila Zahra Khairunnisa', class: 'X-MIPA 2' },
-  { id: 'std-7', nisn: '0071829107', name: 'Dimas Aditya Nugroho', class: 'X-MIPA 2' },
-  { id: 'std-8', nisn: '0071829108', name: 'Putri Rahayu Wulandari', class: 'X-MIPA 2' },
-  { id: 'std-9', nisn: '0071829109', name: 'Muhammad Farhan', class: 'X-MIPA 2' },
-  { id: 'std-10', nisn: '0071829110', name: 'Zahra Aulia Rachman', class: 'X-MIPA 2' },
+  // Siswa Tingkat SMA (Kelas X)
+  { id: 'std-1', nisn: '0071829101', name: 'Ahmad Fauzi Pratama', class: 'X-MIPA 1', noAbsen: 1, gender: 'L', status: 'Aktif' },
+  { id: 'std-2', nisn: '0071829102', name: 'Siti Nurhaliza Putri', class: 'X-MIPA 1', noAbsen: 2, gender: 'P', status: 'Aktif' },
+  { id: 'std-3', nisn: '0071829103', name: 'Budi Santoso', class: 'X-MIPA 1', noAbsen: 3, gender: 'L', status: 'Aktif' },
+  { id: 'std-4', nisn: '0071829104', name: 'Dewi Lestari Kusuma', class: 'X-MIPA 1', noAbsen: 4, gender: 'P', status: 'Aktif' },
+  // Siswa Tingkat SMP (Kelas VII & VIII)
+  { id: 'std-5', nisn: '0082910111', name: 'Muhammad Rizky Ramadhan', class: 'VII-A', noAbsen: 1, gender: 'L', status: 'Aktif' },
+  { id: 'std-6', nisn: '0082910112', name: 'Anisa Rahmawati', class: 'VII-A', noAbsen: 2, gender: 'P', status: 'Aktif' },
+  { id: 'std-7', nisn: '0082910113', name: 'Farel Pratama', class: 'VIII-B', noAbsen: 5, gender: 'L', status: 'Aktif' },
+  // Siswa Tingkat SD (Kelas 5 & 6)
+  { id: 'std-8', nisn: '0103829201', name: 'Aditya Surya Kencana', class: '5-A', noAbsen: 1, gender: 'L', status: 'Aktif' },
+  { id: 'std-9', nisn: '0103829202', name: 'Cantika Putri Aulia', class: '5-A', noAbsen: 2, gender: 'P', status: 'Aktif' },
+  { id: 'std-10', nisn: '0103829203', name: 'Danendra Rafif Pratama', class: '6-B', noAbsen: 3, gender: 'L', status: 'Aktif' },
 ];
 
 export const initialExams: Exam[] = [
@@ -110,6 +249,12 @@ export const initialExams: Exam[] = [
         id: 'q1',
         number: 1,
         question: 'Himpunan penyelesaian dari sistem persamaan linear dua variabel: 2x + 3y = 8 dan x - 2y = -3 adalah...',
+        questionType: 'pilihan_ganda',
+        cognitiveLevel: 'C3',
+        cognitiveDescription: 'C3 - Menerapkan metode substitusi/eliminasi untuk menyelesaikan SPLDV',
+        scoreWeight: 1,
+        competencyIndicator: 'Disajikan SPLDV dua variabel, siswa dapat menentukan himpunan penyelesaian (x, y) secara tepat.',
+        keywords: ['x = 1', 'y = 2', 'substitusi', 'SPLDV'],
         options: {
           a: 'x = 1, y = 2',
           b: 'x = 2, y = 1',
@@ -124,6 +269,12 @@ export const initialExams: Exam[] = [
         id: 'q2',
         number: 2,
         question: 'Nilai x yang memenuhi pertidaksamaan linear |2x - 5| < 7 adalah...',
+        questionType: 'pilihan_ganda',
+        cognitiveLevel: 'C3',
+        cognitiveDescription: 'C3 - Menerapkan sifat-sifat nilai mutlak satu variabel',
+        scoreWeight: 1,
+        competencyIndicator: 'Disajikan pertidaksamaan nilai mutlak linear, siswa dapat menentukan interval penyelesaian.',
+        keywords: ['-1 < x < 6', 'nilai mutlak', 'interval'],
         options: {
           a: 'x < -1 atau x > 6',
           b: '-1 < x < 6',
@@ -138,6 +289,12 @@ export const initialExams: Exam[] = [
         id: 'q3',
         number: 3,
         question: 'Diketahui fungsi f(x) = 3x - 4 dan g(x) = x² + 2. Rumus komposisi fungsi (g ∘ f)(x) adalah...',
+        questionType: 'pilihan_ganda',
+        cognitiveLevel: 'C4',
+        cognitiveDescription: 'C4 - Menganalisis operasi aljabar pada komposisi dua fungsi',
+        scoreWeight: 1,
+        competencyIndicator: 'Diberikan rumus dua fungsi, siswa dapat menganalisis dan menyusun rumus fungsi komposisi.',
+        keywords: ['9x² - 24x + 18', 'komposisi', 'kuadrat'],
         options: {
           a: '9x² - 24x + 18',
           b: '9x² - 24x + 14',
@@ -152,6 +309,12 @@ export const initialExams: Exam[] = [
         id: 'q4',
         number: 4,
         question: 'Akar-akar persamaan kuadrat x² - 5x + 6 = 0 adalah x₁ dan x₂. Nilai dari (x₁² + x₂²) adalah...',
+        questionType: 'pilihan_ganda',
+        cognitiveLevel: 'C4',
+        cognitiveDescription: 'C4 - Menganalisis hubungan rumus jumlah dan hasil kali akar kuadrat',
+        scoreWeight: 1,
+        competencyIndicator: 'Disajikan persamaan kuadrat, siswa dapat menghitung nilai operasi simetris akar-akar.',
+        keywords: ['13', 'jumlah kuadrat', 'Vieta'],
         options: {
           a: '11',
           b: '13',
@@ -166,6 +329,12 @@ export const initialExams: Exam[] = [
         id: 'q5',
         number: 5,
         question: 'Suku ke-10 dari barisan aritmetika 3, 7, 11, 15, ... adalah...',
+        questionType: 'pilihan_ganda',
+        cognitiveLevel: 'C2',
+        cognitiveDescription: 'C2 - Memahami konsep pola dan suku ke-n barisan aritmetika',
+        scoreWeight: 1,
+        competencyIndicator: 'Disajikan barisan aritmetika bilangan, siswa dapat menentukan suku ke-n yang diminta.',
+        keywords: ['39', 'beda 4', 'suku ke-10'],
         options: {
           a: '37',
           b: '39',

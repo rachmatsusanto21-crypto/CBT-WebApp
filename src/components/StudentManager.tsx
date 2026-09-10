@@ -23,6 +23,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { Student } from '../types';
+import { CLASS_ROSTER_OPTIONS } from '../initialData';
 
 interface StudentManagerProps {
   students: Student[];
@@ -89,10 +90,36 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   // Status notification message
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Available classes computed from student list + defaults
+  // Available classes computed from standard SD, SMP, SMA options + student list
+  const defaultClasses = CLASS_ROSTER_OPTIONS.flatMap((g) => g.classes);
   const classList = Array.from(
-    new Set(['X-MIPA 1', 'X-MIPA 2', 'X-IPS 1', 'XI-MIPA 1', 'XII-MIPA 1', ...students.map((s) => s.class)])
+    new Set([...defaultClasses, ...students.map((s) => s.class)])
   ).filter(Boolean);
+
+  const renderClassSelectOptions = () => (
+    <>
+      {CLASS_ROSTER_OPTIONS.map((grp) => (
+        <optgroup key={grp.category} label={grp.category}>
+          {grp.classes.map((cls) => (
+            <option key={cls} value={cls}>
+              {cls}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      {students.some((s) => !defaultClasses.includes(s.class)) && (
+        <optgroup label="Kelas Tambahan / Khusus">
+          {Array.from<string>(new Set(students.map((s) => s.class)))
+            .filter((c: string) => !defaultClasses.includes(c))
+            .map((cls: string) => (
+              <option key={cls} value={cls}>
+                {cls}
+              </option>
+            ))}
+        </optgroup>
+      )}
+    </>
+  );
 
   // Filtered students
   const filteredStudents = students.filter((s) => {
@@ -555,11 +582,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 onChange={(e) => setFormData({ ...formData, className: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                {classList.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                {renderClassSelectOptions()}
               </select>
             </div>
 
@@ -688,11 +711,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-medium text-slate-700 outline-none"
             >
               <option value="Semua">Semua Kelas ({students.length})</option>
-              {classList.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              {renderClassSelectOptions()}
             </select>
           </div>
 
@@ -1064,11 +1083,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     onChange={(e) => setEditForm({ ...editForm, className: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
                   >
-                    {classList.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
+                    {renderClassSelectOptions()}
                   </select>
                 </div>
               </div>

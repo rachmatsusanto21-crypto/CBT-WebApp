@@ -25,13 +25,26 @@ export const Letterhead: React.FC<LetterheadProps> = ({
       {/* Kop Surat Header */}
       <div className="flex items-center justify-between pb-3 border-b-2 border-black">
         {/* Logo Kiri: Logo Pemda / Garuda */}
-        <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center">
-          <svg viewBox="0 0 100 100" className="w-18 h-18 text-amber-600 fill-current">
-            <polygon points="50,5 95,35 75,90 25,90 5,35" fill="none" stroke="currentColor" strokeWidth="4" />
-            <circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" strokeWidth="3" />
-            <path d="M50,22 L50,78 M22,50 L78,50 M32,32 L68,68 M32,68 L68,32" stroke="currentColor" strokeWidth="2.5" />
-            <circle cx="50" cy="50" r="10" fill="currentColor" />
-          </svg>
+        <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center overflow-hidden">
+          {settings.logoPemdaUrl ? (
+            <img
+              src={settings.logoPemdaUrl}
+              alt="Logo Pemda"
+              className="max-h-20 max-w-20 object-contain"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                // Fallback if image fails to load
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <svg viewBox="0 0 100 100" className="w-18 h-18 text-amber-600 fill-current">
+              <polygon points="50,5 95,35 75,90 25,90 5,35" fill="none" stroke="currentColor" strokeWidth="4" />
+              <circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" strokeWidth="3" />
+              <path d="M50,22 L50,78 M22,50 L78,50 M32,32 L68,68 M32,68 L68,32" stroke="currentColor" strokeWidth="2.5" />
+              <circle cx="50" cy="50" r="10" fill="currentColor" />
+            </svg>
+          )}
         </div>
 
         {/* Kop Teks Tengah */}
@@ -54,14 +67,27 @@ export const Letterhead: React.FC<LetterheadProps> = ({
         </div>
 
         {/* Logo Kanan: Tut Wuri Handayani / Logo Sekolah */}
-        <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center">
-          <svg viewBox="0 0 100 100" className="w-18 h-18 text-blue-800 fill-current">
-            <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="4" />
-            <polygon points="50,15 85,75 15,75" fill="none" stroke="currentColor" strokeWidth="3.5" />
-            <path d="M50,30 L50,65" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
-            <circle cx="50" cy="40" r="6" fill="currentColor" />
-            <path d="M35,62 Q50,72 65,62" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
+        <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center overflow-hidden">
+          {settings.logoSekolahUrl ? (
+            <img
+              src={settings.logoSekolahUrl}
+              alt="Logo Sekolah"
+              className="max-h-20 max-w-20 object-contain"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                // Fallback if image fails to load
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <svg viewBox="0 0 100 100" className="w-18 h-18 text-blue-800 fill-current">
+              <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="4" />
+              <polygon points="50,15 85,75 15,75" fill="none" stroke="currentColor" strokeWidth="3.5" />
+              <path d="M50,30 L50,65" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+              <circle cx="50" cy="40" r="6" fill="currentColor" />
+              <path d="M35,62 Q50,72 65,62" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          )}
         </div>
       </div>
 

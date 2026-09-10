@@ -336,10 +336,17 @@ export const StudentExam: React.FC<StudentExamProps> = ({
       explanation: string;
     }> = [];
 
+    let totalMaxScore = 0;
+    let totalEarnedScore = 0;
+
     questions.forEach((q, idx) => {
       const studentAns = (answers[q.id] || '').trim();
       const qType = q.questionType || 'pilihan_ganda';
+      const weight = q.scoreWeight || (qType === 'uraian' ? 4 : qType === 'isian_singkat' ? 2 : 1);
+      totalMaxScore += weight;
+
       let isCorrect = false;
+      let matchedKeywords: string[] = [];
 
       if (qType === 'pilihan_ganda' || qType === 'benar_salah') {
         isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.toLowerCase());
@@ -348,15 +355,31 @@ export const StudentExam: React.FC<StudentExamProps> = ({
         const correctSet = new Set(q.correctAnswer.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean));
         isCorrect = studentSet.size === correctSet.size && [...studentSet].every((val) => correctSet.has(val));
       } else if (qType === 'isian_singkat') {
-        isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.trim().toLowerCase());
+        // Skoring Isian Pendek berdasarkan kata kunci AI & jawaban eksak
+        const normalizedStudent = studentAns.toLowerCase().trim();
+        const primaryMatch = Boolean(normalizedStudent && normalizedStudent === q.correctAnswer.trim().toLowerCase());
+        const keywordMatch = Array.isArray(q.keywords) && q.keywords.some((kw) => {
+          const k = kw.toLowerCase().trim();
+          return normalizedStudent === k || normalizedStudent.includes(k) || (k.length > 3 && k.includes(normalizedStudent));
+        });
+        isCorrect = primaryMatch || Boolean(keywordMatch);
       } else if (qType === 'uraian') {
-        isCorrect = Boolean(studentAns.length >= 10);
+        // Skoring Uraian berdasarkan kemunculan kata kunci AI (minimal 50% keyword terpenuhi)
+        const normalizedStudent = studentAns.toLowerCase().trim();
+        if (Array.isArray(q.keywords) && q.keywords.length > 0) {
+          matchedKeywords = q.keywords.filter((kw) => normalizedStudent.includes(kw.toLowerCase().trim()));
+          const keywordRatio = matchedKeywords.length / q.keywords.length;
+          isCorrect = keywordRatio >= 0.5;
+        } else {
+          isCorrect = Boolean(normalizedStudent.length >= 20);
+        }
       } else {
         isCorrect = Boolean(studentAns && studentAns.toLowerCase() === q.correctAnswer.toLowerCase());
       }
 
       if (isCorrect) {
         correctCount += 1;
+        totalEarnedScore += weight;
       } else {
         // Format display answers
         const optKey = studentAns.toLowerCase() as 'a' | 'b' | 'c' | 'd';
@@ -368,18 +391,22 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           ? `${q.correctAnswer.toUpperCase()}: ${q.options[corrKey]}`
           : q.correctAnswer;
 
+        const keywordNote = q.keywords && q.keywords.length > 0
+          ? ` | Kata Kunci Esensial AI: [${q.keywords.join(', ')}]`
+          : '';
+
         wrongAnswers.push({
           questionNumber: idx + 1,
           question: q.question,
           studentAnswer: studentLabel,
           correctAnswer: correctLabel,
-          explanation: q.explanation || 'Pembahasan materi belum tersedia.',
+          explanation: (q.explanation || 'Pembahasan materi belum tersedia.') + keywordNote,
         });
       }
     });
 
     const totalQuestions = questions.length;
-    const score = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+    const score = totalMaxScore > 0 ? Math.round((totalEarnedScore / totalMaxScore) * 100) : 0;
     const percentage = `${score}%`;
 
     const payload = {

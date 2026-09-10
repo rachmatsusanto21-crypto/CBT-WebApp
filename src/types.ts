@@ -28,6 +28,13 @@ export interface Question {
   correctAnswers?: string[]; // For pilihan_ganda_kompleks: e.g. ['a', 'c']
   explanation: string;
   category?: string;
+  // Taksonomi Bloom & Anderson & Penskoran
+  cognitiveLevel?: 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | string;
+  cognitiveDescription?: string; // Contoh: "C2 - Memahami / Menjelaskan konsep"
+  scoreWeight?: number; // Bobot skor maksimal butir soal (misal PG: 1, Isian: 2, Uraian: 4)
+  keywords?: string[]; // Kata kunci penilaian otomatis isian singkat dan uraian yang digenerate AI
+  competencyIndicator?: string; // Indikator Capaian Pembelajaran untuk Kisi-Kisi
+  rubricGuide?: string; // Pedoman penskoran / rubrik penilaian
 }
 
 export interface Exam {
@@ -123,7 +130,11 @@ export interface SchoolSettings {
   teleponEmail: string;
   kepalaSekolah: string;
   nipKepalaSekolah: string;
+  guruPengampu?: string;
+  nipGuruPengampu?: string;
   tahunAjaran: string;
   semester: string;
+  logoPemdaUrl?: string; // Logo Pemerintah Daerah / Provinsi / Tut Wuri Handayani (Kiri)
+  logoSekolahUrl?: string; // Logo Satuan Pendidikan / Sekolah (Kanan)
 }
 
