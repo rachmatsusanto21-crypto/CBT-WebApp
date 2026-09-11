@@ -319,6 +319,11 @@ app.post("/api/question-history/deploy", (req, res) => {
   }
 });
 
+// Get all exams
+app.get("/api/exams", (req, res) => {
+  res.json({ success: true, count: exams.length, exams });
+});
+
 // Create exam
 app.post("/api/exams", (req, res) => {
   try {
@@ -326,11 +331,49 @@ app.post("/api/exams", (req, res) => {
     if (!newExam.code || !newExam.token || !newExam.title) {
       return res.status(400).json({ error: "Kode soal, token, dan judul wajib diisi" });
     }
-    newExam.id = "exam-" + Date.now();
-    newExam.createdAt = new Date().toISOString();
-    newExam.isActive = true;
-    exams.unshift(newExam);
+    if (!newExam.id) {
+      newExam.id = "exam-" + Date.now();
+    }
+    newExam.createdAt = newExam.createdAt || new Date().toISOString();
+    newExam.isActive = newExam.isActive !== false;
+    
+    // Check if already exists to prevent duplicate IDs
+    const existingIndex = exams.findIndex((e) => e.id === newExam.id);
+    if (existingIndex >= 0) {
+      exams[existingIndex] = newExam;
+    } else {
+      exams.unshift(newExam);
+    }
     res.json({ success: true, exam: newExam });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update exam
+app.put("/api/exams/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const index = exams.findIndex((e) => e.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Paket ujian tidak ditemukan" });
+    }
+    const updatedExam: Exam = { ...exams[index], ...req.body, id };
+    exams[index] = updatedExam;
+    res.json({ success: true, exam: updatedExam });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete exam
+app.delete("/api/exams/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const beforeCount = exams.length;
+    exams = exams.filter((e) => e.id !== id);
+    const deleted = beforeCount > exams.length;
+    res.json({ success: true, deleted, remainingCount: exams.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

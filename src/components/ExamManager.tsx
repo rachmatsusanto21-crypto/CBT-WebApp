@@ -20,7 +20,9 @@ import {
   Plus,
   Edit3,
   Sliders,
-  Award
+  Award,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Exam, Question, QuestionType, ExamType, SavedQuestionPackage } from '../types';
 import { safeFetchJson } from '../utils/apiHelper';
@@ -34,11 +36,15 @@ import {
   BLOOM_COGNITIVE_LEVELS
 } from '../initialData';
 import { QuestionEditModal } from './QuestionEditModal';
+import { ExamEditModal } from './ExamEditModal';
 
 interface ExamManagerProps {
   exams: Exam[];
   onExamCreated: (newExam: Exam) => void;
   onSelectPrintExam: (exam: Exam) => void;
+  onUpdateExam?: (updatedExam: Exam) => void;
+  onDeleteExam?: (examId: string) => void;
+  onSelectExamForStudent?: (exam: Exam) => void;
   onSaveToHistory?: (pkg: SavedQuestionPackage) => void;
   onOpenHistory?: () => void;
   onNavigateToSettings?: () => void;
@@ -48,10 +54,18 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   exams,
   onExamCreated,
   onSelectPrintExam,
+  onUpdateExam,
+  onDeleteExam,
+  onSelectExamForStudent,
   onSaveToHistory,
   onOpenHistory,
   onNavigateToSettings,
 }) => {
+  // Active Exam CRUD Modal States
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
+  const [selectingExam, setSelectingExam] = useState<Exam | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
   // AI Generator Form State
   const [subject, setSubject] = useState<string>('Pendidikan Pancasila');
   const [examType, setExamType] = useState<ExamType>('Penilaian Tengah Semester');
@@ -137,8 +151,34 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       setNewExamToken(`CBT${new Date().getFullYear()}`);
       setNewExamDuration(count > 25 ? 60 : count > 10 ? 45 : 30);
 
+      // Auto-save generated questions to history so they are NEVER lost
+      const autoPackage: SavedQuestionPackage = {
+        id: 'pkg-' + Date.now(),
+        title: `${examType}: ${subject} (${topic.slice(0, 35)}...)`,
+        subject,
+        grade,
+        examType,
+        topic,
+        difficulty,
+        questionCount: questions.length,
+        questionType: questionType === 'campuran' ? 'pilihan_ganda' : questionType,
+        questions,
+        savedAt: new Date().toISOString(),
+        isDeployed: false,
+      };
+      if (onSaveToHistory) {
+        onSaveToHistory(autoPackage);
+      }
+      safeFetchJson('/api/question-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(autoPackage),
+      }).catch((e) => console.warn('Background history auto-save:', e));
+
       if (generatedVia === 'client') {
-        setSaveSuccessMessage('Berhasil membuat soal menggunakan Gemini AI Engine langsung di peramban (Client Mode)!');
+        setSaveSuccessMessage('Berhasil membuat soal menggunakan Gemini AI Engine langsung di peramban (Client Mode) & otomatis tersimpan di Riwayat Soal!');
+      } else {
+        setSaveSuccessMessage('Berhasil membuat soal menggunakan Gemini AI & otomatis tersimpan di Riwayat Soal!');
       }
     } catch (err: any) {
       console.error('Generate questions error:', err);
@@ -148,7 +188,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     }
   };
 
-  // Deploy directly as active exam
+  // Deploy directly as active exam (fail-safe with client persistence)
   const handleDeployExam = async () => {
     if (!previewQuestions || previewQuestions.length === 0) return;
     if (!newExamTitle || !newExamCode || !newExamToken) {
@@ -157,6 +197,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     }
 
     setIsSaving(true);
+    setGenError('');
     try {
       const newExam: Exam = {
         id: 'exam-' + Date.now(),
@@ -172,21 +213,46 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      const { ok, data, error } = await safeFetchJson('/api/exams', {
+      // 1. Immediately create exam in React state & local storage (guaranteed success)
+      onExamCreated(newExam);
+
+      // 2. Also register in SavedQuestionPackage history as deployed
+      const deployedPackage: SavedQuestionPackage = {
+        id: 'pkg-' + Date.now(),
+        title: newExam.title,
+        subject: newExam.subject,
+        grade: newExam.grade,
+        examType: newExam.examType || examType,
+        topic: topic || newExam.title,
+        difficulty: difficulty || 'Sedang',
+        questionCount: newExam.questions.length,
+        questionType: questionType === 'campuran' ? 'pilihan_ganda' : questionType,
+        questions: newExam.questions,
+        savedAt: new Date().toISOString(),
+        isDeployed: true,
+        deployedExamCode: newExam.code,
+      };
+      if (onSaveToHistory) {
+        onSaveToHistory(deployedPackage);
+      }
+
+      // 3. Persist to Express backend in background (graceful if backend offline or 404)
+      safeFetchJson('/api/exams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newExam),
-      });
+      }).catch((e) => console.warn('Server sync exam warning:', e));
 
-      if (ok && data?.success && data?.exam) {
-        onExamCreated(data.exam);
-        setSaveSuccessMessage(
-          `Berhasil mendeploy paket ujian ${newExam.code}! Siswa dapat login menggunakan token "${newExam.token}".`
-        );
-        setPreviewQuestions(null);
-      } else {
-        throw new Error(error || 'Gagal mendeploy paket soal.');
-      }
+      safeFetchJson('/api/question-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deployedPackage),
+      }).catch((e) => console.warn('Server sync package warning:', e));
+
+      setSaveSuccessMessage(
+        `Berhasil mendeploy paket ujian ${newExam.code}! Paket ujian aktif di CBT dan otomatis tersimpan di Riwayat Soal.`
+      );
+      setPreviewQuestions(null);
     } catch (err: any) {
       setGenError(err.message || 'Gagal mendeploy paket soal.');
     } finally {
@@ -198,33 +264,37 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const handleSaveToHistory = async () => {
     if (!previewQuestions || previewQuestions.length === 0) return;
     setIsSaving(true);
+    setGenError('');
     try {
-      const payload = {
-        title: newExamTitle || `${examType}: ${subject}`,
+      const payload: SavedQuestionPackage = {
+        id: 'pkg-' + Date.now(),
+        title: newExamTitle || `${examType}: ${subject} (${topic.slice(0, 35)}...)`,
         subject,
         grade,
         examType,
         topic,
         difficulty,
+        questionCount: previewQuestions.length,
         questionType: questionType === 'campuran' ? 'pilihan_ganda' : questionType,
         questions: previewQuestions,
+        savedAt: new Date().toISOString(),
+        isDeployed: false,
       };
 
-      const { ok, data, error } = await safeFetchJson('/api/question-history', {
+      if (onSaveToHistory) {
+        onSaveToHistory(payload);
+      }
+
+      safeFetchJson('/api/question-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
+      }).catch((e) => console.warn('Server sync history warning:', e));
 
-      if (ok && data?.success && data?.package) {
-        if (onSaveToHistory) onSaveToHistory(data.package);
-        setSaveSuccessMessage(
-          `Paket soal berhasil disimpan ke dalam Riwayat Soal! Anda dapat mendeploy soal ini kapan saja.`
-        );
-        setPreviewQuestions(null);
-      } else {
-        throw new Error(error || data?.error || 'Gagal menyimpan ke riwayat');
-      }
+      setSaveSuccessMessage(
+        `Paket soal berhasil disimpan ke dalam Riwayat Soal! Anda dapat mendeploy atau mencetak soal ini kapan saja.`
+      );
+      setPreviewQuestions(null);
     } catch (err: any) {
       setGenError(err.message || 'Gagal menyimpan paket soal ke riwayat.');
     } finally {
@@ -239,7 +309,12 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     if (editingQuestionItem.targetExamId) {
       const targetExam = exams.find((e) => e.id === editingQuestionItem.targetExamId);
       if (targetExam) {
-        targetExam.questions[editingQuestionItem.index] = updatedQuestion;
+        const updatedQuestions = [...targetExam.questions];
+        updatedQuestions[editingQuestionItem.index] = updatedQuestion;
+        const updatedExam: Exam = { ...targetExam, questions: updatedQuestions };
+        if (onUpdateExam) {
+          onUpdateExam(updatedExam);
+        }
       }
     } else if (previewQuestions) {
       const updated = [...previewQuestions];
@@ -671,38 +746,91 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           </div>
 
           <div className="space-y-3">
-            {exams.map((ex) => {
-              const isExpanded = expandedExamId === ex.id;
-              return (
-                <div
-                  key={ex.id}
-                  className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all space-y-2.5"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono bg-blue-100 text-blue-800 text-xs font-black px-2.5 py-0.5 rounded-lg border border-blue-200">
-                          {ex.code}
-                        </span>
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                          AKTIF
-                        </span>
+            {exams.length === 0 ? (
+              <div className="bg-white p-8 rounded-3xl border border-dashed border-slate-300 text-center space-y-2">
+                <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-sm font-bold text-slate-700">Belum Ada Paket Ujian Aktif di CBT</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Gunakan form AI Generator di sebelah kiri atau pilih paket dari Riwayat Soal untuk mengaktifkan ujian di CBT.
+                </p>
+              </div>
+            ) : (
+              exams.map((ex) => {
+                const isExpanded = expandedExamId === ex.id;
+                return (
+                  <div
+                    key={ex.id}
+                    className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono bg-blue-100 text-blue-800 text-xs font-black px-2.5 py-0.5 rounded-lg border border-blue-200">
+                            {ex.code}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              ex.isActive !== false
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {ex.isActive !== false ? 'AKTIF' : 'NON-AKTIF'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm mt-1">{ex.title}</h4>
+                        <p className="text-xs text-slate-500">
+                          {ex.subject} • {ex.grade}
+                        </p>
                       </div>
-                      <h4 className="font-bold text-slate-900 text-sm mt-1">{ex.title}</h4>
-                      <p className="text-xs text-slate-500">{ex.subject} • {ex.grade}</p>
-                    </div>
 
-                    <div className="flex items-center space-x-1.5">
-                      <button
-                        onClick={() => onSelectPrintExam(ex)}
-                        title="Cetak Naskah & Kisi-Kisi"
-                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200 text-xs font-bold flex items-center space-x-1"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Cetak</span>
-                      </button>
+                      {/* Action Buttons: Pilih, Edit, Hapus, Cetak */}
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        {/* Tombol Pilih */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectingExam(ex)}
+                          title="Pilih dan Uji Paket Ujian Ini"
+                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-colors border border-blue-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Pilih</span>
+                        </button>
+
+                        {/* Tombol Edit */}
+                        <button
+                          type="button"
+                          onClick={() => setEditingExam(ex)}
+                          title="Edit Paket Ujian & Butir Soal"
+                          className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl transition-colors border border-amber-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+
+                        {/* Tombol Hapus */}
+                        <button
+                          type="button"
+                          onClick={() => setDeletingExam(ex)}
+                          title="Hapus Paket Ujian dari CBT"
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition-colors border border-rose-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
+
+                        {/* Tombol Cetak */}
+                        <button
+                          type="button"
+                          onClick={() => onSelectPrintExam(ex)}
+                          title="Cetak Naskah & Kisi-Kisi"
+                          className="p-1.5 sm:px-2.5 sm:py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Cetak</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs pt-1 border-t border-slate-100">
                     <span className="flex items-center space-x-1 text-slate-600">
@@ -769,7 +897,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   )}
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
       </div>
@@ -802,10 +930,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               </button>
 
               <button
-                onClick={() => setPreviewQuestions(null)}
-                className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl"
+                type="button"
+                onClick={() => {
+                  setPreviewQuestions(null);
+                  setSaveSuccessMessage('');
+                }}
+                className="px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-1 transition-colors"
+                title="Tutup & Hapus Tinjauan Preview Soal Ini"
               >
-                Batal
+                <X className="w-3.5 h-3.5" />
+                <span>Tutup Preview</span>
               </button>
 
               <button
@@ -1103,6 +1237,161 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   Terapkan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Active Exam Modal */}
+      {editingExam && (
+        <ExamEditModal
+          exam={editingExam}
+          isOpen={true}
+          onClose={() => setEditingExam(null)}
+          onSave={(updated) => {
+            if (onUpdateExam) {
+              onUpdateExam(updated);
+            }
+            setSaveSuccessMessage(`Paket ujian ${updated.code} berhasil diperbarui!`);
+            setEditingExam(null);
+          }}
+        />
+      )}
+
+      {/* Delete Exam Confirmation Modal */}
+      {deletingExam && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Hapus Paket Ujian CBT?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Apakah Anda yakin ingin menghapus paket ujian{' '}
+                <strong className="text-slate-900 font-mono">
+                  [{deletingExam.code}] {deletingExam.title}
+                </strong>
+                ?
+              </p>
+              <p className="text-[11px] text-rose-600 bg-rose-50 p-2.5 rounded-xl border border-rose-100 text-left mt-2">
+                Paket ini akan dihapus dari daftar ujian aktif CBT dan tidak akan ter-load lagi saat aplikasi di-refresh/reload.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingExam(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteExam) {
+                    onDeleteExam(deletingExam.id);
+                  }
+                  setSaveSuccessMessage(`Paket ujian ${deletingExam.code} berhasil dihapus.`);
+                  setDeletingExam(null);
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md"
+              >
+                Ya, Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Select Exam Action Modal */}
+      {selectingExam && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Pilih Paket Ujian</h3>
+                  <span className="font-mono text-xs text-blue-600 font-bold">{selectingExam.code}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectingExam(null)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-2">
+              <p className="font-bold text-slate-900">{selectingExam.title}</p>
+              <div className="grid grid-cols-2 gap-2 text-slate-600 text-[11px]">
+                <div>Mapel: <strong>{selectingExam.subject}</strong></div>
+                <div>Kelas: <strong>{selectingExam.grade}</strong></div>
+                <div>Durasi: <strong>{selectingExam.durationMinutes} Menit</strong></div>
+                <div>Soal: <strong>{selectingExam.questions.length} Butir</strong></div>
+              </div>
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Token Akses Siswa</span>
+                  <span className="font-mono font-bold text-purple-700 text-sm tracking-wider">{selectingExam.token}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `Kode Soal: ${selectingExam.code} | Token Ujian: ${selectingExam.token}`
+                    );
+                    setCopiedToken(selectingExam.id);
+                    setTimeout(() => setCopiedToken(null), 2000);
+                  }}
+                  className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold flex items-center space-x-1 transition-colors"
+                >
+                  {copiedToken === selectingExam.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700">Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Salin Token & Kode</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSelectExamForStudent) {
+                    onSelectExamForStudent(selectingExam);
+                  }
+                  setSelectingExam(null);
+                }}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Mulai Uji Coba di Mode Siswa</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingExam(selectingExam);
+                  setSelectingExam(null);
+                }}
+                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center space-x-1.5"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Buka Form Edit Paket Ini</span>
+              </button>
             </div>
           </div>
         </div>

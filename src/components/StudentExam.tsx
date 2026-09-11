@@ -26,6 +26,7 @@ interface StudentExamProps {
   exams: Exam[];
   schoolSettings: SchoolSettings;
   preselectedStudent?: Student | null;
+  preselectedExam?: Exam | null;
   onViolationOccurred: () => void;
   onExamSubmitted: (result: ExamResult) => void;
 }
@@ -35,13 +36,14 @@ export const StudentExam: React.FC<StudentExamProps> = ({
   exams,
   schoolSettings,
   preselectedStudent,
+  preselectedExam,
   onViolationOccurred,
   onExamSubmitted,
 }) => {
   // Login State
   const [selectedStudentName, setSelectedStudentName] = useState<string>('');
   const [inputToken, setInputToken] = useState<string>('');
-  const [selectedExamId, setSelectedExamId] = useState<string>(exams[0]?.id || '');
+  const [selectedExamId, setSelectedExamId] = useState<string>(preselectedExam?.id || exams[0]?.id || '');
   const [loginError, setLoginError] = useState<string>('');
 
   // Pre-fill selected student if passed from StudentManager
@@ -50,6 +52,14 @@ export const StudentExam: React.FC<StudentExamProps> = ({
       setSelectedStudentName(preselectedStudent.name);
     }
   }, [preselectedStudent]);
+
+  // Pre-fill selected exam if passed from ExamManager
+  useEffect(() => {
+    if (preselectedExam && preselectedExam.id) {
+      setSelectedExamId(preselectedExam.id);
+      setInputToken(preselectedExam.token);
+    }
+  }, [preselectedExam]);
 
   // Active Exam State
   const [activeExam, setActiveExam] = useState<Exam | null>(null);

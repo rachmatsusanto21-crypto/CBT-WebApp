@@ -13,13 +13,53 @@ import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, SavedQues
 import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages } from './initialData';
 import { safeFetchJson } from './utils/apiHelper';
 
+// Helper to get initial exams safely respecting cache & deleted list
+const getInitialExams = (): Exam[] => {
+  try {
+    const deletedRaw = localStorage.getItem('cbt_deleted_exam_ids');
+    const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+    const deletedSet = new Set(deletedIds);
+
+    const cachedRaw = localStorage.getItem('cbt_exams_cache');
+    if (cachedRaw) {
+      const parsed: Exam[] = JSON.parse(cachedRaw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((e) => !deletedSet.has(e.id));
+      }
+    }
+    return initialExams.filter((e) => !deletedSet.has(e.id));
+  } catch {
+    return initialExams;
+  }
+};
+
+// Helper to get initial saved question packages safely respecting cache & deleted list
+const getInitialSavedPackages = (): SavedQuestionPackage[] => {
+  try {
+    const deletedRaw = localStorage.getItem('cbt_deleted_package_ids');
+    const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+    const deletedSet = new Set(deletedIds);
+
+    const cachedRaw = localStorage.getItem('cbt_saved_packages_cache');
+    if (cachedRaw) {
+      const parsed: SavedQuestionPackage[] = JSON.parse(cachedRaw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((p) => !deletedSet.has(p.id));
+      }
+    }
+    return initialSavedPackages.filter((p) => !deletedSet.has(p.id));
+  } catch {
+    return initialSavedPackages;
+  }
+};
+
 export default function App() {
   // Mode: 'siswa' or 'admin'
   const [currentMode, setCurrentMode] = useState<'siswa' | 'admin'>('siswa');
   const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings'>('monitoring');
 
   // Core Data State with localStorage cache fallback
-  const [exams, setExams] = useState<Exam[]>(initialExams);
+  const [exams, setExams] = useState<Exam[]>(getInitialExams);
   const [students, setStudents] = useState<Student[]>(() => {
     try {
       const cached = localStorage.getItem('cbt_students_cache');
@@ -35,11 +75,12 @@ export default function App() {
     return initialStudents;
   });
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(initialSchoolSettings);
-  const [savedPackages, setSavedPackages] = useState<SavedQuestionPackage[]>(initialSavedPackages);
+  const [savedPackages, setSavedPackages] = useState<SavedQuestionPackage[]>(getInitialSavedPackages);
   const [monitoringList, setMonitoringList] = useState<MonitoringStudent[]>([]);
   const [resultsList, setResultsList] = useState<ExamResult[]>([]);
   const [selectedPrintExam, setSelectedPrintExam] = useState<Exam | null>(null);
   const [preselectedStudent, setPreselectedStudent] = useState<Student | null>(null);
+  const [preselectedExam, setPreselectedExam] = useState<Exam | null>(null);
 
   // Read URL query parameter "?mode=siswa" or "?mode=admin"
   useEffect(() => {
@@ -61,7 +102,40 @@ export default function App() {
     try {
       const { ok, data } = await safeFetchJson('/api/initial-state');
       if (ok && data) {
-        if (data.exams && data.exams.length > 0) setExams(data.exams);
+        // Read deleted IDs to ensure deleted items never get resurrected on reload
+        const deletedExamIds: string[] = (() => {
+          try {
+            const raw = localStorage.getItem('cbt_deleted_exam_ids');
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        })();
+        const deletedExamSet = new Set(deletedExamIds);
+
+        const deletedPackageIds: string[] = (() => {
+          try {
+            const raw = localStorage.getItem('cbt_deleted_package_ids');
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        })();
+        const deletedPackageSet = new Set(deletedPackageIds);
+
+        if (data.exams && Array.isArray(data.exams)) {
+          const validServerExams = data.exams.filter((e: Exam) => !deletedExamSet.has(e.id));
+          setExams((prev) => {
+            const serverMap = new Map(validServerExams.map((e: Exam) => [e.id, e]));
+            const localOnly = prev.filter((e) => !deletedExamSet.has(e.id) && !serverMap.has(e.id));
+            const merged = [...validServerExams, ...localOnly];
+            try {
+              localStorage.setItem('cbt_exams_cache', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+
         if (data.students && data.students.length > 0) {
           setStudents((prev) => {
             const serverIds = new Set(data.students.map((s: Student) => s.id));
@@ -73,8 +147,22 @@ export default function App() {
             return merged;
           });
         }
+
         if (data.schoolSettings) setSchoolSettings(data.schoolSettings);
-        if (data.savedPackages && data.savedPackages.length > 0) setSavedPackages(data.savedPackages);
+
+        if (data.savedPackages && Array.isArray(data.savedPackages)) {
+          const validServerPackages = data.savedPackages.filter((p: SavedQuestionPackage) => !deletedPackageSet.has(p.id));
+          setSavedPackages((prev) => {
+            const serverMap = new Map(validServerPackages.map((p: SavedQuestionPackage) => [p.id, p]));
+            const localOnly = prev.filter((p) => !deletedPackageSet.has(p.id) && !serverMap.has(p.id));
+            const merged = [...validServerPackages, ...localOnly];
+            try {
+              localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+
         if (data.monitoring) setMonitoringList(data.monitoring);
         if (data.results) setResultsList(data.results);
       }
@@ -89,7 +177,94 @@ export default function App() {
 
   // Handle Exam creation
   const handleExamCreated = (newExam: Exam) => {
-    setExams((prev) => [newExam, ...prev]);
+    setExams((prev) => {
+      const exists = prev.some((e) => e.id === newExam.id);
+      const updated = exists ? prev.map((e) => (e.id === newExam.id ? newExam : e)) : [newExam, ...prev];
+      try {
+        localStorage.setItem('cbt_exams_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    safeFetchJson('/api/exams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newExam),
+    }).catch(() => {});
+  };
+
+  // Handle Exam update (Edit)
+  const handleUpdateExam = async (updatedExam: Exam) => {
+    setExams((prev) => {
+      const updated = prev.map((e) => (e.id === updatedExam.id ? updatedExam : e));
+      try {
+        localStorage.setItem('cbt_exams_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      await safeFetchJson(`/api/exams/${updatedExam.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedExam),
+      });
+    } catch (err) {
+      console.warn('Backend update exam warning:', err);
+    }
+  };
+
+  // Handle Exam delete (Hapus)
+  const handleDeleteExam = async (id: string) => {
+    // 1. Immediately remove from React state and localStorage cache
+    setExams((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      try {
+        localStorage.setItem('cbt_exams_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Blacklist ID in localStorage so it never re-appears upon reload
+    try {
+      const deletedRaw = localStorage.getItem('cbt_deleted_exam_ids');
+      const deletedList: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      if (!deletedList.includes(id)) {
+        deletedList.push(id);
+        localStorage.setItem('cbt_deleted_exam_ids', JSON.stringify(deletedList));
+      }
+    } catch {}
+
+    // 3. Inform backend
+    try {
+      await safeFetchJson(`/api/exams/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Backend delete exam warning:', err);
+    }
+  };
+
+  // Handle Save to Question History
+  const handleSaveToHistory = (pkg: SavedQuestionPackage) => {
+    setSavedPackages((prev) => {
+      const exists = prev.some((p) => p.id === pkg.id);
+      const updated = exists ? prev.map((p) => (p.id === pkg.id ? pkg : p)) : [pkg, ...prev];
+      try {
+        localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    safeFetchJson('/api/question-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pkg),
+    }).catch(() => {});
+  };
+
+  // Handle Select Exam for Student Mode test
+  const handleSelectExamForStudent = (exam: Exam) => {
+    setPreselectedExam(exam);
+    setCurrentMode('siswa');
   };
 
   // Handle Settings update
@@ -106,13 +281,44 @@ export default function App() {
     }
   };
 
-  // Handle Deploy Question Package
+  // Handle Deploy Question Package (Fail-safe with instant local state)
   const handleDeployPackage = async (
     pkg: SavedQuestionPackage,
     config: { token: string; code: string; duration: number; title: string; examType: ExamType }
   ) => {
     try {
-      const { ok, data, error } = await safeFetchJson('/api/question-history/deploy', {
+      const newExam: Exam = {
+        id: 'exam-' + Date.now(),
+        code: config.code.trim().toUpperCase(),
+        title: config.title.trim() || pkg.title,
+        subject: pkg.subject,
+        grade: pkg.grade,
+        examType: config.examType || pkg.examType,
+        token: config.token.trim().toUpperCase(),
+        durationMinutes: Number(config.duration) || 30,
+        questions: pkg.questions,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      // 1. Immediately create exam in active exams state & cache (guaranteed success)
+      handleExamCreated(newExam);
+
+      // 2. Mark deployed in savedPackages
+      setSavedPackages((prev) => {
+        const updated = prev.map((p) =>
+          p.id === pkg.id
+            ? { ...p, isDeployed: true, deployedExamCode: newExam.code }
+            : p
+        );
+        try {
+          localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      // 3. Attempt server deploy in background
+      safeFetchJson('/api/question-history/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,24 +329,7 @@ export default function App() {
           title: config.title,
           examType: config.examType,
         }),
-      });
-
-      if (!ok || !data) {
-        throw new Error(error || 'Gagal mendeploy paket soal.');
-      }
-
-      if (data.exam) {
-        setExams((prev) => [data.exam, ...prev.filter((e) => e.id !== data.exam.id)]);
-      }
-
-      // Mark deployed in savedPackages
-      setSavedPackages((prev) =>
-        prev.map((p) =>
-          p.id === pkg.id
-            ? { ...p, isDeployed: true, deployedExamId: data.exam?.id, deployedExamCode: data.exam?.code }
-            : p
-        )
-      );
+      }).catch((e) => console.warn('Server sync history deploy warning:', e));
     } catch (err) {
       console.error('Failed to deploy package:', err);
       throw err;
@@ -149,12 +338,30 @@ export default function App() {
 
   // Handle Delete Question Package
   const handleDeletePackage = async (id: string) => {
+    // 1. Immediately remove from React state & localStorage
+    setSavedPackages((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Blacklist ID so it never re-appears upon reload
+    try {
+      const deletedRaw = localStorage.getItem('cbt_deleted_package_ids');
+      const deletedList: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      if (!deletedList.includes(id)) {
+        deletedList.push(id);
+        localStorage.setItem('cbt_deleted_package_ids', JSON.stringify(deletedList));
+      }
+    } catch {}
+
+    // 3. Inform backend
     try {
       await safeFetchJson(`/api/question-history/${id}`, { method: 'DELETE' });
-      setSavedPackages((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
       console.error('Failed to delete question package:', err);
-      throw err;
     }
   };
 
@@ -345,6 +552,7 @@ export default function App() {
             exams={exams}
             schoolSettings={schoolSettings}
             preselectedStudent={preselectedStudent}
+            preselectedExam={preselectedExam}
             onViolationOccurred={loadInitialData}
             onExamSubmitted={handleExamSubmitted}
           />
@@ -361,6 +569,11 @@ export default function App() {
               <ExamManager
                 exams={exams}
                 onExamCreated={handleExamCreated}
+                onUpdateExam={handleUpdateExam}
+                onDeleteExam={handleDeleteExam}
+                onSelectExamForStudent={handleSelectExamForStudent}
+                onSaveToHistory={handleSaveToHistory}
+                onOpenHistory={() => setAdminTab('riwayat-soal')}
                 onSelectPrintExam={(ex) => {
                   setSelectedPrintExam(ex);
                   setAdminTab('cetak');
