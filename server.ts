@@ -481,12 +481,23 @@ Berikan respon terstruktur dengan format Markdown yang rapi dalam Bahasa Indones
 ### 4. 🌟 Pesan Motivasi Guru
 (Kalimat apresiasi atas usaha siswa dan motivasi positif untuk terus belajar)`;
 
-        const geminiRes = await ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: prompt,
-        });
+// Remedial Analysis with multi-model fallback cascade
+        let geminiResText = "";
+        const remedialModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+        for (const modelName of remedialModels) {
+          try {
+            const geminiRes = await ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+            });
+            geminiResText = geminiRes.text || "";
+            if (geminiResText) break;
+          } catch (mErr: any) {
+            console.warn(`Remedial model ${modelName} failed, trying next fallback:`, mErr.message || mErr);
+          }
+        }
 
-        remedialReport = geminiRes.text || "Analisis remedial telah disiapkan.";
+        remedialReport = geminiResText || `Catatan Guru: Siswa perlu mengulang konsep pada ${wrongAnswers.length} soal yang belum tepat, khususnya materi dasar dan ketelitian pengerjaan.`;
       } catch (aiErr: any) {
         console.error("Gemini Remedial error:", aiErr);
         remedialReport = `Catatan Guru: Siswa perlu mengulang konsep pada ${wrongAnswers.length} soal yang belum tepat, khususnya materi dasar dan ketelitian pengerjaan.`;
@@ -604,12 +615,13 @@ PANDUAN PENSKORAN & KATA KUNCI:
 
 Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown block.`;
 
-      // Attempt generation with primary model gemini-3.8-flash, fallback to gemini-3.1-flash-lite
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite"];
+      // Multi-model fallback cascade for high demand spikes (503/429)
+      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
       let lastErr: any = null;
 
       for (const modelName of modelsToTry) {
-        for (let attempt = 1; attempt <= 2; attempt++) {
+        let maxAttemptsForModel = 2;
+        for (let attempt = 1; attempt <= maxAttemptsForModel; attempt++) {
           try {
             const response = await ai.models.generateContent({
               model: modelName,
@@ -663,9 +675,19 @@ Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown bloc
             }
           } catch (err: any) {
             lastErr = err;
-            console.warn(`Attempt ${attempt} with model ${modelName} failed:`, err.message || err);
-            // Brief pause before retry
-            await new Promise((r) => setTimeout(r, 1000));
+            const errMsg = String(err?.message || err || "");
+            const isHighDemand = errMsg.includes("503") || errMsg.includes("high demand") || errMsg.includes("UNAVAILABLE");
+
+            if (isHighDemand) {
+              // Immediately proceed to the next fallback model without repeating attempt
+              console.warn(`Model ${modelName} experiencing high demand (503). Switching to fallback model immediately...`);
+              break;
+            } else {
+              console.warn(`Attempt ${attempt} with model ${modelName} failed:`, errMsg);
+              if (attempt < maxAttemptsForModel) {
+                await new Promise((r) => setTimeout(r, 1000));
+              }
+            }
           }
         }
       }
@@ -674,8 +696,8 @@ Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown bloc
       return [];
     };
 
-    // Partition count into batches of at most 5 items to keep latency under 6 seconds
-    const BATCH_SIZE = 5;
+    // Partition count into batches of up to 10 items for high efficiency
+    const BATCH_SIZE = 10;
     const batchSizes: number[] = [];
     let remaining = safeCount;
     while (remaining > 0) {
@@ -685,13 +707,17 @@ Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown bloc
     }
 
     let offset = 0;
-    const batchPromises = batchSizes.map((size) => {
-      const currentOffset = offset;
+    const results: any[][] = [];
+    for (let i = 0; i < batchSizes.length; i++) {
+      const size = batchSizes[i];
+      const batchRes = await generateSingleBatch(size, offset);
       offset += size;
-      return generateSingleBatch(size, currentOffset);
-    });
-
-    const results = await Promise.all(batchPromises);
+      results.push(batchRes);
+      if (i < batchSizes.length - 1) {
+        // Brief breather to avoid hitting burst rate limits
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
     const questionsRaw = results.flat();
 
     const formattedQuestions: Question[] = questionsRaw.map((q, idx) => {
