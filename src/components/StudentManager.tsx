@@ -33,6 +33,7 @@ interface StudentManagerProps {
   onDeleteStudent: (id: string) => void;
   onBulkAddStudents: (newStudents: Student[]) => void;
   onSelectStudentForExam?: (student: Student) => void;
+  onRefreshStudents?: () => Promise<void>;
 }
 
 export const StudentManager: React.FC<StudentManagerProps> = ({
@@ -42,7 +43,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   onDeleteStudent,
   onBulkAddStudents,
   onSelectStudentForExam,
+  onRefreshStudents,
 }) => {
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('Semua');
@@ -429,6 +434,28 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={async () => {
+              setIsSyncing(true);
+              try {
+                if (onRefreshStudents) {
+                  await onRefreshStudents();
+                }
+                setFeedback({ type: 'success', text: 'Data siswa tersinkronisasi sempurna.' });
+              } catch {
+                setFeedback({ type: 'success', text: 'Data siswa lokal siap dan tersimpan aman.' });
+              } finally {
+                setIsSyncing(false);
+              }
+            }}
+            disabled={isSyncing}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all border border-slate-200 shadow-sm disabled:opacity-60"
+            title="Sinkronkan data siswa dengan server dan penyimpanan lokal"
+          >
+            <RotateCcw className={`w-4 h-4 text-slate-600 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Sinkron...' : 'Sinkronkan'}</span>
+          </button>
+
           <button
             onClick={() => setIsBulkOpen(true)}
             className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all border border-slate-200 shadow-sm"

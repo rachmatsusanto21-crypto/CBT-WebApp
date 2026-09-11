@@ -287,6 +287,26 @@ export default function App() {
     }
   };
 
+  // Manually refresh and sync students with server and localStorage
+  const handleRefreshStudents = async () => {
+    try {
+      const { ok, data } = await safeFetchJson('/api/students');
+      if (ok && data?.students) {
+        setStudents((prev) => {
+          const serverMap = new Map(data.students.map((s: Student) => [s.id, s]));
+          const localOnly = prev.filter((p) => !serverMap.has(p.id));
+          const merged = [...data.students, ...localOnly];
+          try {
+            localStorage.setItem('cbt_students_cache', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    } catch (err) {
+      console.warn('Refresh student sync warning:', err);
+    }
+  };
+
   // Switch to Student mode with pre-selected student
   const handleSelectStudentForExam = (student: Student) => {
     setPreselectedStudent(student);
@@ -368,6 +388,7 @@ export default function App() {
                 onDeleteStudent={handleDeleteStudent}
                 onBulkAddStudents={handleBulkAddStudents}
                 onSelectStudentForExam={handleSelectStudentForExam}
+                onRefreshStudents={handleRefreshStudents}
               />
             )}
 

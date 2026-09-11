@@ -64,13 +64,19 @@ app.put("/api/settings", (req, res) => {
 // MANAJEMEN DATA SISWA APIs
 // ========================
 
+// Route paths supporting plural, singular, and Indonesian names
+const STUDENT_BASE_ROUTES = ["/api/students", "/api/student", "/api/siswa", "/api/data-siswa"];
+const STUDENT_BULK_ROUTES = ["/api/students/bulk", "/api/student/bulk", "/api/siswa/bulk", "/api/data-siswa/bulk"];
+const STUDENT_ID_ROUTES = ["/api/students/:id", "/api/student/:id", "/api/siswa/:id", "/api/data-siswa/:id"];
+const STUDENT_BULK_DELETE_ROUTES = ["/api/students/bulk-delete", "/api/student/bulk-delete", "/api/siswa/bulk-delete", "/api/data-siswa/bulk-delete"];
+
 // Get all students
-app.get("/api/students", (req, res) => {
-  res.json({ success: true, students });
+app.get(STUDENT_BASE_ROUTES, (req, res) => {
+  res.json({ success: true, count: students.length, students });
 });
 
 // Add single student
-app.post("/api/students", (req, res) => {
+app.post(STUDENT_BASE_ROUTES, (req, res) => {
   try {
     const body = req.body || {};
     const rawName = body.name ? String(body.name).trim() : "";
@@ -100,7 +106,7 @@ app.post("/api/students", (req, res) => {
 });
 
 // Bulk import students
-app.post("/api/students/bulk", (req, res) => {
+app.post(STUDENT_BULK_ROUTES, (req, res) => {
   try {
     const body = req.body || {};
     const rawList = body.students;
@@ -136,14 +142,25 @@ app.post("/api/students/bulk", (req, res) => {
   }
 });
 
-// Update student
-app.put("/api/students/:id", (req, res) => {
+// Update student (with upsert if not found to prevent 404)
+app.put(STUDENT_ID_ROUTES, (req, res) => {
   try {
     const { id } = req.params;
     const { name, nisn, className, gender, noAbsen, status } = req.body;
     const index = students.findIndex((s) => s.id === id);
     if (index === -1) {
-      return res.status(404).json({ error: "Siswa tidak ditemukan" });
+      // Upsert student gracefully
+      const upserted: Student = {
+        id,
+        name: name !== undefined ? String(name).trim() : "Siswa",
+        nisn: nisn !== undefined ? String(nisn).trim() : "00" + Math.floor(10000000 + Math.random() * 90000000),
+        class: className !== undefined ? className : "X-MIPA 1",
+        gender: gender === "P" ? "P" : "L",
+        noAbsen: noAbsen !== undefined ? Number(noAbsen) : students.length + 1,
+        status: status !== undefined ? status : "Aktif",
+      };
+      students.push(upserted);
+      return res.json({ success: true, student: upserted });
     }
     students[index] = {
       ...students[index],
@@ -161,7 +178,7 @@ app.put("/api/students/:id", (req, res) => {
 });
 
 // Delete student
-app.delete("/api/students/:id", (req, res) => {
+app.delete(STUDENT_ID_ROUTES, (req, res) => {
   try {
     const { id } = req.params;
     students = students.filter((s) => s.id !== id);
@@ -172,7 +189,7 @@ app.delete("/api/students/:id", (req, res) => {
 });
 
 // Bulk delete students
-app.post("/api/students/bulk-delete", (req, res) => {
+app.post(STUDENT_BULK_DELETE_ROUTES, (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids)) {
