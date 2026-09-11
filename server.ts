@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -11,15 +12,82 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({ limit: "50mb" }));
+
+// Persistent Storage File on Disk
+const DATA_DIR = path.join(process.cwd(), "data");
+const STORE_FILE = path.join(DATA_DIR, "cbt_persistent_store.json");
 
 // In-Memory Database
-let exams: Exam[] = [...initialExams];
+let exams: Exam[] = [];
 let students: Student[] = [...initialStudents];
 let schoolSettings: SchoolSettings = { ...initialSchoolSettings };
-let savedPackages: SavedQuestionPackage[] = [...initialSavedPackages];
+let savedPackages: SavedQuestionPackage[] = [];
 let monitoringList: Map<string, MonitoringStudent> = new Map();
 let examResults: ExamResult[] = [];
+let userHasCreatedData = false;
+
+// Load persistent data from disk on startup
+function initStore() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(STORE_FILE)) {
+      const raw = fs.readFileSync(STORE_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.exams) && parsed.exams.length > 0) {
+        exams = parsed.exams;
+        userHasCreatedData = true;
+      }
+      if (Array.isArray(parsed.students) && parsed.students.length > 0) {
+        students = parsed.students;
+      }
+      if (parsed.schoolSettings) {
+        schoolSettings = parsed.schoolSettings;
+      }
+      if (Array.isArray(parsed.savedPackages) && parsed.savedPackages.length > 0) {
+        savedPackages = parsed.savedPackages;
+        userHasCreatedData = true;
+      }
+      if (Array.isArray(parsed.results)) {
+        examResults = parsed.results;
+      }
+      console.log(`[Store] Berhasil memuat ${exams.length} naskah ujian & ${savedPackages.length} riwayat soal dari disk.`);
+    }
+  } catch (err) {
+    console.error("[Store] Gagal membaca persistent store:", err);
+  }
+
+  // Only fallback to initial samples if absolutely nothing exists on disk or from user
+  if (exams.length === 0 && !userHasCreatedData) {
+    exams = [...initialExams];
+  }
+  if (savedPackages.length === 0 && !userHasCreatedData) {
+    savedPackages = [...initialSavedPackages];
+  }
+}
+
+function persistStore() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const dataToSave = {
+      exams,
+      students,
+      schoolSettings,
+      savedPackages,
+      results: examResults,
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(STORE_FILE, JSON.stringify(dataToSave, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[Store] Gagal menyimpan persistent store ke disk:", err);
+  }
+}
+
+initStore();
 
 // Initialize AI Client
 const apiKey = process.env.GEMINI_API_KEY;
@@ -54,7 +122,49 @@ app.put("/api/settings", (req, res) => {
   try {
     const updated = req.body;
     schoolSettings = { ...schoolSettings, ...updated };
+    persistStore();
     res.json({ success: true, schoolSettings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full state sync from client to persist across all student devices & Google Drive sync
+app.post("/api/sync-all", (req, res) => {
+  try {
+    const { exams: clientExams, savedPackages: clientPackages, students: clientStudents, schoolSettings: clientSettings } = req.body;
+    if (Array.isArray(clientExams) && clientExams.length > 0) {
+      exams = clientExams;
+      userHasCreatedData = true;
+    }
+    if (Array.isArray(clientPackages) && clientPackages.length > 0) {
+      savedPackages = clientPackages;
+      userHasCreatedData = true;
+    }
+    if (Array.isArray(clientStudents) && clientStudents.length > 0) {
+      students = clientStudents;
+    }
+    if (clientSettings) {
+      schoolSettings = clientSettings;
+    }
+    persistStore();
+    res.json({ success: true, examsCount: exams.length, packagesCount: savedPackages.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy public file from Google Drive (bypasses CORS for student devices)
+app.get("/api/drive/proxy/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const driveUrl = `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download`;
+    const driveRes = await fetch(driveUrl);
+    if (!driveRes.ok) {
+      return res.status(driveRes.status).json({ error: `Gagal memuat file Google Drive (${driveRes.status})` });
+    }
+    const data = await driveRes.json();
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -99,6 +209,7 @@ app.post(STUDENT_BASE_ROUTES, (req, res) => {
     } else {
       students.push(newStudent);
     }
+    persistStore();
     res.json({ success: true, student: newStudent });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Gagal menyimpan data siswa" });
@@ -182,6 +293,7 @@ app.delete(STUDENT_ID_ROUTES, (req, res) => {
   try {
     const { id } = req.params;
     students = students.filter((s) => s.id !== id);
+    persistStore();
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -199,6 +311,7 @@ app.post(STUDENT_BULK_DELETE_ROUTES, (req, res) => {
     const beforeCount = students.length;
     students = students.filter((s) => !idSet.has(s.id));
     const deletedCount = beforeCount - students.length;
+    persistStore();
     res.json({ success: true, count: deletedCount });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -259,6 +372,8 @@ app.post("/api/question-history", (req, res) => {
     };
 
     savedPackages.unshift(newPackage);
+    userHasCreatedData = true;
+    persistStore();
     res.json({ success: true, package: newPackage });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -270,6 +385,7 @@ app.delete("/api/question-history/:id", (req, res) => {
   try {
     const { id } = req.params;
     savedPackages = savedPackages.filter((p) => p.id !== id);
+    persistStore();
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -308,10 +424,12 @@ app.post("/api/question-history/deploy", (req, res) => {
     };
 
     exams.unshift(deployedExam);
+    userHasCreatedData = true;
 
     // Update package status in history
     pkg.isDeployed = true;
     pkg.deployedExamCode = deployedExam.code;
+    persistStore();
 
     res.json({ success: true, exam: deployedExam, package: pkg });
   } catch (err: any) {
@@ -344,6 +462,8 @@ app.post("/api/exams", (req, res) => {
     } else {
       exams.unshift(newExam);
     }
+    userHasCreatedData = true;
+    persistStore();
     res.json({ success: true, exam: newExam });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -360,6 +480,7 @@ app.put("/api/exams/:id", (req, res) => {
     }
     const updatedExam: Exam = { ...exams[index], ...req.body, id };
     exams[index] = updatedExam;
+    persistStore();
     res.json({ success: true, exam: updatedExam });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -373,6 +494,7 @@ app.delete("/api/exams/:id", (req, res) => {
     const beforeCount = exams.length;
     exams = exams.filter((e) => e.id !== id);
     const deleted = beforeCount > exams.length;
+    persistStore();
     res.json({ success: true, deleted, remainingCount: exams.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -568,6 +690,7 @@ Berikan respon terstruktur dengan format Markdown yang rapi dalam Bahasa Indones
     };
 
     examResults.unshift(result);
+    persistStore();
 
     // Update monitoring status to 'Selesai'
     const key = `${studentName}_${examCode}`;
