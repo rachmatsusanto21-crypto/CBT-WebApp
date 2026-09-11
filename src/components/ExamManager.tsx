@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Exam, Question, QuestionType, ExamType, SavedQuestionPackage } from '../types';
 import { safeFetchJson } from '../utils/apiHelper';
+import { generateExamQuestionsWithFallback } from '../utils/geminiGenerator';
 import {
   SUBJECT_OPTIONS,
   EXAM_TYPE_OPTIONS,
@@ -40,6 +41,7 @@ interface ExamManagerProps {
   onSelectPrintExam: (exam: Exam) => void;
   onSaveToHistory?: (pkg: SavedQuestionPackage) => void;
   onOpenHistory?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 export const ExamManager: React.FC<ExamManagerProps> = ({
@@ -48,6 +50,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   onSelectPrintExam,
   onSaveToHistory,
   onOpenHistory,
+  onNavigateToSettings,
 }) => {
   // AI Generator Form State
   const [subject, setSubject] = useState<string>('Pendidikan Pancasila');
@@ -105,38 +108,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setTopic(cleanTopic + compositionTag);
   };
 
-  // Call Gemini API to generate questions
+  // Call Gemini API to generate questions (with auto-fallback for Vercel 404 & high demand)
   const handleGenerateAI = async () => {
     setGenError('');
     setIsGenerating(true);
     setSaveSuccessMessage('');
 
     try {
-      const { ok, data, error } = await safeFetchJson('/api/gemini/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          subject,
-          grade,
-          count,
-          difficulty,
-          questionType,
-          examType,
-        }),
+      const { questions, generatedVia } = await generateExamQuestionsWithFallback({
+        topic,
+        subject,
+        grade,
+        count,
+        difficulty,
+        questionType,
+        examType,
       });
 
-      if (!ok || !data || !data.success) {
-        throw new Error(error || data?.error || 'Gagal memanggil Gemini AI');
+      if (!questions || questions.length === 0) {
+        throw new Error('Tidak ada butir soal yang berhasil dirumuskan. Coba ulangi kembali.');
       }
 
-      setPreviewQuestions(data.questions);
+      setPreviewQuestions(questions);
       setNewExamTitle(`${examType}: ${subject} (${topic.slice(0, 35)}...)`);
       const prefix = subject.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase();
       const randomCodeSuffix = Math.floor(100 + Math.random() * 900);
       setNewExamCode(`${prefix}${randomCodeSuffix}`);
       setNewExamToken(`CBT${new Date().getFullYear()}`);
       setNewExamDuration(count > 25 ? 60 : count > 10 ? 45 : 30);
+
+      if (generatedVia === 'client') {
+        setSaveSuccessMessage('Berhasil membuat soal menggunakan Gemini AI Engine langsung di peramban (Client Mode)!');
+      }
     } catch (err: any) {
       console.error('Generate questions error:', err);
       setGenError(err.message || 'Terjadi kesalahan saat membuat soal AI.');
@@ -362,9 +365,28 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           </div>
 
           {genError && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{genError}</span>
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl text-xs space-y-2">
+              <div className="flex items-start space-x-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong className="font-bold block text-rose-900 mb-0.5">Kendala Pembuatan Soal AI:</strong>
+                  <span className="leading-relaxed">{genError}</span>
+                </div>
+              </div>
+              {onNavigateToSettings && (
+                <div className="pt-2 border-t border-rose-200/80 flex items-center justify-between">
+                  <span className="text-[11px] text-rose-600">
+                    Perlu mengatur atau memverifikasi API Key?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onNavigateToSettings}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs shadow-sm transition-all"
+                  >
+                    Buka Pengaturan & API Key
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

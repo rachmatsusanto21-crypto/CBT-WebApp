@@ -1,11 +1,11 @@
 import React from 'react';
-import { ShieldAlert, BookOpen, GraduationCap, Users, Sparkles, Printer, FileCode2, BarChart2, Archive, UserCheck } from 'lucide-react';
+import { ShieldAlert, BookOpen, GraduationCap, Users, Sparkles, Printer, FileCode2, BarChart2, Archive, UserCheck, Key } from 'lucide-react';
 
 interface NavbarProps {
   currentMode: 'siswa' | 'admin';
   setMode: (mode: 'siswa' | 'admin') => void;
-  adminTab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas';
-  setAdminTab: (tab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas') => void;
+  adminTab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings';
+  setAdminTab: (tab: 'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings') => void;
   schoolName: string;
   activeViolationsCount?: number;
   savedPackagesCount?: number;
@@ -182,6 +182,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <FileCode2 className="w-3.5 h-3.5 text-orange-400" />
               <span>Kode GAS</span>
+            </button>
+
+            <button
+              onClick={() => setAdminTab('settings')}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors font-medium ${
+                adminTab === 'settings'
+                  ? 'bg-slate-800 text-amber-400 border border-slate-700 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span>Pengaturan & API Key</span>
             </button>
           </div>
         )}

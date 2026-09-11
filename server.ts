@@ -546,9 +546,91 @@ app.get("/api/results", (req, res) => {
   res.json({ results: examResults });
 });
 
-// Gemini AI: Generate Exam Questions (with alias)
+// Gemini AI: API Status & Key Verification
+app.all(["/api/gemini/status", "/api/status"], async (req, res) => {
+  try {
+    const customKey =
+      (req.headers["x-gemini-api-key"] as string) ||
+      req.body?.apiKey ||
+      (req.query?.apiKey as string);
+
+    const activeKey = customKey || process.env.GEMINI_API_KEY;
+
+    if (!activeKey) {
+      return res.json({
+        active: false,
+        source: "none",
+        hasServerKey: false,
+        message: "GEMINI_API_KEY belum dikonfigurasi di server maupun browser.",
+      });
+    }
+
+    const testClient = new GoogleGenAI({
+      apiKey: activeKey,
+      httpOptions: {
+        headers: { "User-Agent": "aistudio-build" },
+      },
+    });
+
+    const startTime = Date.now();
+    const modelsToTest = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+    let workingModel = "";
+    let lastError: any = null;
+
+    for (const m of modelsToTest) {
+      try {
+        const ping = await testClient.models.generateContent({
+          model: m,
+          contents: "Koneksi tes. Jawab: Siap",
+        });
+        if (ping.text) {
+          workingModel = m;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    if (workingModel) {
+      return res.json({
+        active: true,
+        source: customKey ? "custom" : "server",
+        model: workingModel,
+        latencyMs,
+        hasServerKey: Boolean(process.env.GEMINI_API_KEY),
+        message: `Koneksi Gemini AI Aktif! Model ${workingModel} berhasil terhubung (Latensi ${latencyMs}ms).`,
+      });
+    } else {
+      const errMsg = lastError?.message || String(lastError || "Kunci API tidak valid atau habis kuota");
+      return res.json({
+        active: false,
+        source: customKey ? "custom" : "server",
+        hasServerKey: Boolean(process.env.GEMINI_API_KEY),
+        error: errMsg,
+        message: `Kunci API tidak valid atau mengalami gangguan: ${errMsg}`,
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({
+      active: false,
+      error: err.message,
+      message: `Gagal memverifikasi status API: ${err.message}`,
+    });
+  }
+});
+
+// Gemini AI: Generate Exam Questions (with alias and custom key support)
 app.post(["/api/gemini/generate-questions", "/api/generate-questions"], async (req, res) => {
   try {
+    const customKey =
+      (req.headers["x-gemini-api-key"] as string) ||
+      req.body?.customApiKey;
+
+    const activeKey = customKey || process.env.GEMINI_API_KEY;
+
     const {
       topic,
       grade,
@@ -563,9 +645,16 @@ app.post(["/api/gemini/generate-questions", "/api/generate-questions"], async (r
       return res.status(400).json({ error: "Topik atau kisi-kisi soal wajib diisi" });
     }
 
-    if (!apiKey) {
-      return res.status(500).json({ error: "GEMINI_API_KEY tidak ditemukan di environment" });
+    if (!activeKey) {
+      return res.status(400).json({
+        error: "GEMINI_API_KEY belum dikonfigurasi. Silakan masukkan API Key di menu Pengaturan atau atur di Environment Variables.",
+        needsApiKey: true,
+      });
     }
+
+    const requestAi = customKey
+      ? new GoogleGenAI({ apiKey: customKey, httpOptions: { headers: { "User-Agent": "aistudio-build" } } })
+      : ai;
 
     const safeCount = Math.min(50, Math.max(1, Number(count) || 5));
 
@@ -623,7 +712,7 @@ Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown bloc
         let maxAttemptsForModel = 2;
         for (let attempt = 1; attempt <= maxAttemptsForModel; attempt++) {
           try {
-            const response = await ai.models.generateContent({
+            const response = await requestAi.models.generateContent({
               model: modelName,
               contents: prompt,
               config: {

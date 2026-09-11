@@ -8,6 +8,7 @@ import { StudentManager } from './components/StudentManager';
 import { PrintExamView } from './components/PrintExamView';
 import { ResultsTable } from './components/ResultsTable';
 import { GASCodeViewer } from './components/GASCodeViewer';
+import { SettingsManager } from './components/SettingsManager';
 import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, SavedQuestionPackage, ExamType } from './types';
 import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages } from './initialData';
 import { safeFetchJson } from './utils/apiHelper';
@@ -15,7 +16,7 @@ import { safeFetchJson } from './utils/apiHelper';
 export default function App() {
   // Mode: 'siswa' or 'admin'
   const [currentMode, setCurrentMode] = useState<'siswa' | 'admin'>('siswa');
-  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas'>('monitoring');
+  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings'>('monitoring');
 
   // Core Data State with localStorage cache fallback
   const [exams, setExams] = useState<Exam[]>(initialExams);
@@ -364,6 +365,7 @@ export default function App() {
                   setSelectedPrintExam(ex);
                   setAdminTab('cetak');
                 }}
+                onNavigateToSettings={() => setAdminTab('settings')}
               />
             )}
 
@@ -409,6 +411,8 @@ export default function App() {
             )}
 
             {adminTab === 'gas' && <GASCodeViewer />}
+
+            {adminTab === 'settings' && <SettingsManager />}
           </main>
         )}
       </div>

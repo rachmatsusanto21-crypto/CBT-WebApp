@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/gemini/generate-questions",
+      "destination": "/api/generate-questions"
+    },
+    {
+      "source": "/api/gemini/status",
+      "destination": "/api/status"
+    }
+  ]
+}
