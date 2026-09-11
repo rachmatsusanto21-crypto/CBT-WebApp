@@ -72,54 +72,67 @@ app.get("/api/students", (req, res) => {
 // Add single student
 app.post("/api/students", (req, res) => {
   try {
-    const { name, nisn, className, gender, noAbsen, status } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: "Nama siswa wajib diisi" });
+    const body = req.body || {};
+    const rawName = body.name ? String(body.name).trim() : "";
+    if (!rawName) {
+      return res.status(400).json({ success: false, error: "Nama siswa wajib diisi" });
     }
     const newStudent: Student = {
-      id: "std-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
-      name: name.trim(),
-      nisn: (nisn || "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
-      class: className || "X-MIPA 1",
-      gender: gender || "L",
-      noAbsen: noAbsen ? Number(noAbsen) : students.length + 1,
-      status: status || "Aktif",
+      id: body.id || ("std-" + Date.now() + "-" + Math.floor(Math.random() * 1000)),
+      name: rawName,
+      nisn: (body.nisn ? String(body.nisn) : "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
+      class: body.className || body.class || "X-MIPA 1",
+      gender: body.gender === "P" ? "P" : "L",
+      noAbsen: body.noAbsen ? Number(body.noAbsen) : students.length + 1,
+      status: body.status || "Aktif",
     };
-    students.push(newStudent);
+    // Avoid duplicate if existing ID
+    const existingIndex = students.findIndex((s) => s.id === newStudent.id);
+    if (existingIndex >= 0) {
+      students[existingIndex] = newStudent;
+    } else {
+      students.push(newStudent);
+    }
     res.json({ success: true, student: newStudent });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message || "Gagal menyimpan data siswa" });
   }
 });
 
 // Bulk import students
 app.post("/api/students/bulk", (req, res) => {
   try {
-    const { students: rawList } = req.body;
+    const body = req.body || {};
+    const rawList = body.students;
     if (!Array.isArray(rawList) || rawList.length === 0) {
-      return res.status(400).json({ error: "Data siswa massal tidak valid atau kosong" });
+      return res.status(400).json({ success: false, error: "Data siswa massal tidak valid atau kosong" });
     }
 
     const createdList: Student[] = [];
     rawList.forEach((item: any, idx: number) => {
       if (item && item.name) {
         const std: Student = {
-          id: "std-" + Date.now() + "-" + idx,
-          name: item.name.trim(),
-          nisn: (item.nisn || "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
+          id: item.id || ("std-" + Date.now() + "-" + idx + "-" + Math.floor(Math.random() * 1000)),
+          name: String(item.name).trim(),
+          nisn: (item.nisn ? String(item.nisn) : "00" + Math.floor(10000000 + Math.random() * 90000000)).trim(),
           class: item.class || item.className || "X-MIPA 1",
           gender: item.gender === "P" ? "P" : "L",
           noAbsen: item.noAbsen ? Number(item.noAbsen) : idx + 1,
           status: item.status || "Aktif",
         };
-        students.push(std);
+        const existingIdx = students.findIndex((s) => s.id === std.id);
+        if (existingIdx >= 0) {
+          students[existingIdx] = std;
+        } else {
+          students.push(std);
+        }
         createdList.push(std);
       }
     });
 
     res.json({ success: true, count: createdList.length, students: createdList });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message || "Gagal mengimpor siswa massal" });
   }
 });
 

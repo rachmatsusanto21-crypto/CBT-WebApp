@@ -216,25 +216,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         status: editForm.status,
       };
 
-      const { ok, data } = await safeFetchJson(`/api/students/${editingStudent.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: updated.name,
-          nisn: updated.nisn,
-          className: updated.class,
-          gender: updated.gender,
-          noAbsen: updated.noAbsen,
-          status: updated.status,
-        }),
-      });
-
-      if (ok && data?.student) {
-        onUpdateStudent(data.student);
-      } else {
-        onUpdateStudent(updated);
-      }
-
+      onUpdateStudent(updated);
       setFeedback({ type: 'success', text: `Data siswa "${updated.name}" berhasil diperbarui.` });
       setEditingStudent(null);
       if (selectedDetailStudent?.id === editingStudent.id) {
@@ -263,13 +245,6 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     try {
       if (deleteModal.isBulk) {
         // Bulk delete
-        await safeFetchJson('/api/students/bulk-delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: deleteModal.ids }),
-        });
-
-        // Trigger delete on parent
         deleteModal.ids.forEach((id) => onDeleteStudent(id));
 
         // Unselect deleted
@@ -288,7 +263,6 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         const idToDelete = deleteModal.ids[0];
         const nameToDelete = deleteModal.names[0];
 
-        await safeFetchJson(`/api/students/${idToDelete}`, { method: 'DELETE' });
         onDeleteStudent(idToDelete);
 
         setSelectedIds((prev) => {
@@ -314,7 +288,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   };
 
   // Add single student handler
-  const handleSaveSingle = async (e: React.FormEvent) => {
+  const handleSaveSingle = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       setFeedback({ type: 'error', text: 'Nama siswa tidak boleh kosong.' });
@@ -322,43 +296,34 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     }
 
     try {
-      const payload = {
+      const newStudent: Student = {
+        id: 'std-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         name: formData.name.trim(),
         nisn: formData.nisn.trim() || '00' + Math.floor(10000000 + Math.random() * 90000000),
-        className: formData.className,
-        gender: formData.gender,
+        class: formData.className || 'X-MIPA 1',
+        gender: formData.gender || 'L',
         noAbsen: formData.noAbsen ? Number(formData.noAbsen) : students.length + 1,
-        status: formData.status,
+        status: formData.status || 'Aktif',
       };
 
-      const { ok, data, error } = await safeFetchJson('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      onAddStudent(newStudent);
+      setFeedback({ type: 'success', text: `Siswa "${newStudent.name}" berhasil ditambahkan!` });
+      setFormData({
+        name: '',
+        nisn: '',
+        className: formData.className,
+        gender: 'L',
+        noAbsen: '',
+        status: 'Aktif',
       });
-
-      if (ok && data?.success && data?.student) {
-        onAddStudent(data.student);
-        setFeedback({ type: 'success', text: `Siswa "${data.student.name}" berhasil ditambahkan!` });
-        setFormData({
-          name: '',
-          nisn: '',
-          className: formData.className,
-          gender: 'L',
-          noAbsen: '',
-          status: 'Aktif',
-        });
-        setIsAdding(false);
-      } else {
-        throw new Error(error || data?.error || 'Gagal menyimpan siswa');
-      }
+      setIsAdding(false);
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.message || 'Gagal menambahkan siswa' });
     }
   };
 
   // Bulk import processor
-  const handleProcessBulk = async () => {
+  const handleProcessBulk = () => {
     setBulkError('');
     if (!bulkText.trim()) {
       setBulkError('Masukkan data siswa terlebih dahulu.');
@@ -366,7 +331,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     }
 
     const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean);
-    const parsedList: any[] = [];
+    const parsedList: Student[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -377,12 +342,13 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       const nisn = parts[1] || '00' + Math.floor(10000000 + Math.random() * 90000000);
       const className = parts[2] || 'X-MIPA 1';
       const gender = (parts[3] || 'L').toUpperCase() === 'P' ? 'P' : 'L';
-      const noAbsen = parts[4] ? Number(parts[4]) : i + 1;
+      const noAbsen = parts[4] ? Number(parts[4]) : students.length + i + 1;
 
       parsedList.push({
+        id: 'std-' + Date.now() + '-' + i + '-' + Math.floor(Math.random() * 1000),
         name,
         nisn,
-        className,
+        class: className,
         gender,
         noAbsen,
         status: 'Aktif',
@@ -395,20 +361,10 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     }
 
     try {
-      const { ok, data, error } = await safeFetchJson('/api/students/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ students: parsedList }),
-      });
-
-      if (ok && data?.success && data?.students) {
-        onBulkAddStudents(data.students);
-        setFeedback({ type: 'success', text: `Berhasil mengimpor ${data.count} siswa sekaligus!` });
-        setIsBulkOpen(false);
-        setBulkText('');
-      } else {
-        throw new Error(error || data?.error || 'Gagal impor data');
-      }
+      onBulkAddStudents(parsedList);
+      setFeedback({ type: 'success', text: `Berhasil mengimpor ${parsedList.length} siswa sekaligus!` });
+      setIsBulkOpen(false);
+      setBulkText('');
     } catch (err: any) {
       setBulkError(err.message || 'Terjadi kesalahan saat memproses data massal');
     }
