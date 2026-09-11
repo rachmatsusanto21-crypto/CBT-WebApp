@@ -535,8 +535,8 @@ app.get("/api/results", (req, res) => {
   res.json({ results: examResults });
 });
 
-// Gemini AI: Generate Exam Questions
-app.post("/api/gemini/generate-questions", async (req, res) => {
+// Gemini AI: Generate Exam Questions (with alias)
+app.post(["/api/gemini/generate-questions", "/api/generate-questions"], async (req, res) => {
   try {
     const {
       topic,
@@ -604,8 +604,8 @@ PANDUAN PENSKORAN & KATA KUNCI:
 
 Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown block.`;
 
-      // Attempt generation with primary fast model gemini-3.1-flash-lite, fallback to gemini-3.6-flash
-      const modelsToTry = ["gemini-3.1-flash-lite", "gemini-3.6-flash"];
+      // Attempt generation with primary model gemini-3.8-flash, fallback to gemini-3.1-flash-lite
+      const modelsToTry = ["gemini-3.8-flash", "gemini-3.1-flash-lite"];
       let lastErr: any = null;
 
       for (const modelName of modelsToTry) {
