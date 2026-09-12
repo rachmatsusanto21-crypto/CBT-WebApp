@@ -22,6 +22,60 @@ const SUBFOLDER_PAKET_UJIAN = 'Paket Ujian Aktif';
 const SUBFOLDER_DATA_SISWA = 'Data Siswa';
 const SUBFOLDER_DATA_NILAI = 'Data Nilai';
 
+/**
+ * Checks whether an exam is an initial AI Studio sample
+ */
+export function isSampleExam(exam: Exam): boolean {
+  if (!exam) return false;
+  return (
+    exam.id === 'exam-1' ||
+    exam.id === 'exam-2' ||
+    exam.code === 'MAT101' ||
+    exam.code === 'IPA202' ||
+    (exam.title && exam.title.includes('Aljabar & Fungsi')) ||
+    (exam.title && exam.title.includes('Ekosistem & Hukum Newton'))
+  );
+}
+
+/**
+ * Checks whether a question package is an initial AI Studio sample
+ */
+export function isSamplePackage(pkg: SavedQuestionPackage): boolean {
+  if (!pkg) return false;
+  return (
+    pkg.id === 'pkg-pancasila-1' ||
+    (pkg.title && pkg.title.toLowerCase().includes('pendidikan pancasila'))
+  );
+}
+
+/**
+ * Checks whether a student is an initial AI Studio sample
+ */
+export function isSampleStudent(std: Student): boolean {
+  if (!std) return false;
+  return (
+    /^std-(10|[1-9])$/.test(std.id) ||
+    std.nisn === '0081234567' ||
+    std.name === 'Ahmad Dahlan' ||
+    std.name === 'Budi Santoso'
+  );
+}
+
+export function filterRealExams(exams: Exam[]): Exam[] {
+  const real = exams.filter((e) => !isSampleExam(e));
+  return real.length > 0 ? real : exams;
+}
+
+export function filterRealPackages(packages: SavedQuestionPackage[]): SavedQuestionPackage[] {
+  const real = packages.filter((p) => !isSamplePackage(p));
+  return real.length > 0 ? real : packages;
+}
+
+export function filterRealStudents(students: Student[]): Student[] {
+  const real = students.filter((s) => !isSampleStudent(s));
+  return real.length > 0 ? real : students;
+}
+
 // In-memory cache for folder IDs
 let cachedFolders: DriveFolderStructure | null = null;
 
@@ -286,17 +340,19 @@ export async function saveAllQuestionPackagesToDrive(
   accessToken: string
 ): Promise<DriveFileInfo> {
   const structure = await ensureDriveStructure(accessToken);
+  const dataToSave = filterRealPackages(packages);
+
   // Also save a unified catalog file for rapid batch loading
   const catalogFile = await saveJsonToDrive(
     'katalog_riwayat_soal.json',
-    packages,
+    dataToSave,
     structure.dataSoalFolderId,
     accessToken,
     true
   );
 
   // Save individual files in parallel (up to 5)
-  for (const pkg of packages) {
+  for (const pkg of dataToSave) {
     try {
       const cleanTitle = (pkg.title || 'Paket_Soal').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 50);
       await saveJsonToDrive(`Soal_${cleanTitle}_${pkg.id}.json`, pkg, structure.dataSoalFolderId, accessToken, true);
@@ -319,27 +375,36 @@ export async function saveActiveExamsToDrive(
   accessToken: string
 ): Promise<DriveFileInfo> {
   const structure = await ensureDriveStructure(accessToken);
+  const dataToSave = filterRealExams(exams);
 
   // 1. Save master active exams JSON
   const masterFile = await saveJsonToDrive(
     'paket_ujian_cbt.json',
-    exams,
+    dataToSave,
     structure.paketUjianFolderId,
     accessToken,
     true
   );
 
   // 2. Save individual exam files for per-exam direct link loading: ujian_{CODE}.json
-  for (const ex of exams) {
+  for (const ex of dataToSave) {
     try {
       const cleanCode = (ex.code || 'EXAM').replace(/[^a-zA-Z0-9_-]/g, '_');
-      await saveJsonToDrive(
+      const fileInfo = await saveJsonToDrive(
         `ujian_${cleanCode}.json`,
         ex,
         structure.paketUjianFolderId,
         accessToken,
         true
       );
+      // Cache file ID in localStorage
+      try {
+        const storedMapStr = localStorage.getItem('cbt_gdrive_exam_file_ids') || '{}';
+        const map = JSON.parse(storedMapStr);
+        map[ex.id] = fileInfo.fileId;
+        map[ex.code] = fileInfo.fileId;
+        localStorage.setItem('cbt_gdrive_exam_file_ids', JSON.stringify(map));
+      } catch {}
     } catch (e) {
       console.warn(`Failed to save individual exam ${ex.code}:`, e);
     }
@@ -358,13 +423,21 @@ export async function saveActiveExamToDrive(
 ): Promise<DriveFileInfo> {
   const structure = await ensureDriveStructure(accessToken);
   const cleanCode = (exam.code || 'EXAM').replace(/[^a-zA-Z0-9_-]/g, '_');
-  return saveJsonToDrive(
+  const fileInfo = await saveJsonToDrive(
     `ujian_${cleanCode}.json`,
     exam,
     structure.paketUjianFolderId,
     accessToken,
     true
   );
+  try {
+    const storedMapStr = localStorage.getItem('cbt_gdrive_exam_file_ids') || '{}';
+    const map = JSON.parse(storedMapStr);
+    map[exam.id] = fileInfo.fileId;
+    map[exam.code] = fileInfo.fileId;
+    localStorage.setItem('cbt_gdrive_exam_file_ids', JSON.stringify(map));
+  } catch {}
+  return fileInfo;
 }
 
 /**
@@ -375,7 +448,19 @@ export async function saveStudentsToDrive(
   accessToken: string
 ): Promise<DriveFileInfo> {
   const structure = await ensureDriveStructure(accessToken);
-  return saveJsonToDrive('data_siswa.json', students, structure.dataSiswaFolderId, accessToken, true);
+  const dataToSave = filterRealStudents(students);
+  return saveJsonToDrive('data_siswa.json', dataToSave, structure.dataSiswaFolderId, accessToken, true);
+}
+
+/**
+ * Saves exam results into subfolder "Data Nilai"
+ */
+export async function saveResultsToDrive(
+  results: any[],
+  accessToken: string
+): Promise<DriveFileInfo> {
+  const structure = await ensureDriveStructure(accessToken);
+  return saveJsonToDrive('rekap_nilai_ujian.json', results, structure.dataNilaiFolderId, accessToken, true);
 }
 
 /**
@@ -394,10 +479,18 @@ export async function saveFullBackupToDrive(
   const structure = await ensureDriveStructure(accessToken);
   const dateStr = new Date().toISOString().slice(0, 10);
   
+  const cleanBackup = {
+    exams: filterRealExams(backupData.exams),
+    savedPackages: filterRealPackages(backupData.savedPackages),
+    students: filterRealStudents(backupData.students),
+    schoolSettings: backupData.schoolSettings,
+    timestamp: backupData.timestamp || new Date().toISOString(),
+  };
+
   // 1. Save dated backup in root folder
   const backupFile = await saveJsonToDrive(
     `CBT_Backup_${dateStr}_${Date.now()}.json`,
-    backupData,
+    cleanBackup,
     structure.rootFolderId,
     accessToken,
     true
@@ -406,7 +499,7 @@ export async function saveFullBackupToDrive(
   // 2. Save latest master backup pointer
   await saveJsonToDrive(
     'CBT_Master_Latest.json',
-    backupData,
+    cleanBackup,
     structure.rootFolderId,
     accessToken,
     true
@@ -414,12 +507,47 @@ export async function saveFullBackupToDrive(
 
   // 3. Save to respective subfolders as well for maximum organization
   await Promise.all([
-    saveActiveExamsToDrive(backupData.exams, accessToken),
-    saveAllQuestionPackagesToDrive(backupData.savedPackages, accessToken),
-    saveStudentsToDrive(backupData.students, accessToken),
+    saveActiveExamsToDrive(cleanBackup.exams, accessToken),
+    saveAllQuestionPackagesToDrive(cleanBackup.savedPackages, accessToken),
+    saveStudentsToDrive(cleanBackup.students, accessToken),
   ]);
 
   return backupFile;
+}
+
+/**
+ * Verifies live Google Drive connection and checks folders
+ */
+export async function verifyDriveConnection(accessToken: string): Promise<{
+  connected: boolean;
+  userEmail?: string;
+  userName?: string;
+  structure?: DriveFolderStructure;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      return { connected: false, error: `Google Drive API error (${res.status}): ${errText}` };
+    }
+    const data = await res.json();
+    const user = data.user;
+    const structure = await ensureDriveStructure(accessToken);
+    return {
+      connected: true,
+      userEmail: user?.emailAddress,
+      userName: user?.displayName,
+      structure,
+    };
+  } catch (err: any) {
+    return {
+      connected: false,
+      error: err.message || 'Koneksi ke Google Drive gagal',
+    };
+  }
 }
 
 /**
@@ -529,3 +657,37 @@ export async function loadQuestionHistoryFromDrive(
   }
   return null;
 }
+
+/**
+ * Loads students from Google Drive folder "Data Siswa":
+ */
+export async function loadStudentsFromDrive(accessToken: string): Promise<Student[] | null> {
+  try {
+    const structure = await ensureDriveStructure(accessToken);
+    const fileName = 'data_siswa.json';
+    const query = `name = '${fileName}' and '${structure.dataSiswaFolderId}' in parents and trashed = false`;
+    const searchRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&spaces=drive`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.files && searchData.files.length > 0) {
+        const fileId = searchData.files[0].id;
+        const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (contentRes.ok) {
+          const data = await contentRes.json();
+          if (Array.isArray(data)) {
+            return filterRealStudents(data);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load students from Google Drive:', err);
+  }
+  return null;
+}
+

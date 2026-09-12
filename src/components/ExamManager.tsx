@@ -42,6 +42,7 @@ import { QuestionEditModal } from './QuestionEditModal';
 import { ExamEditModal } from './ExamEditModal';
 import { getAccessToken, getCachedAccessToken, googleSignIn } from '../services/firebaseAuth';
 import { saveActiveExamToDrive, saveQuestionPackageToDrive } from '../services/googleDriveService';
+import { buildStudentExamUrl } from '../utils/examUrlEncoder';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -77,10 +78,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
   // Copy direct student link for this specific exam
   const handleCopyStudentLink = (ex: Exam) => {
-    const url = new URL(window.location.origin + window.location.pathname);
-    url.searchParams.set('mode', 'siswa');
-    url.searchParams.set('examCode', ex.code);
-    navigator.clipboard.writeText(url.toString());
+    let driveFileId: string | undefined;
+    try {
+      const storedMapStr = localStorage.getItem('cbt_gdrive_exam_file_ids') || '{}';
+      const map = JSON.parse(storedMapStr);
+      driveFileId = map[ex.id] || map[ex.code];
+    } catch {}
+
+    const link = buildStudentExamUrl(ex, driveFileId);
+    navigator.clipboard.writeText(link);
     setCopiedStudentLink(ex.id);
     setTimeout(() => setCopiedStudentLink(null), 2500);
   };
@@ -93,8 +99,11 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       let token = await getAccessToken();
       if (!token) {
         const authRes = await googleSignIn();
-        if (authRes) token = authRes.accessToken;
-        else throw new Error('Harap hubungkan Google Drive terlebih dahulu');
+        if (authRes) {
+          token = authRes.accessToken;
+        } else {
+          return;
+        }
       }
 
       await saveActiveExamToDrive(ex, token);

@@ -20,11 +20,15 @@ import {
   ArrowRight,
   AlertTriangle,
   Sparkles,
-  RotateCcw
+  RotateCcw,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { Student } from '../types';
 import { CLASS_ROSTER_OPTIONS } from '../initialData';
 import { safeFetchJson } from '../utils/apiHelper';
+import { getAccessToken, getCachedAccessToken, googleSignIn } from '../services/firebaseAuth';
+import { saveStudentsToDrive, loadStudentsFromDrive } from '../services/googleDriveService';
 
 interface StudentManagerProps {
   students: Student[];
@@ -34,6 +38,7 @@ interface StudentManagerProps {
   onBulkAddStudents: (newStudents: Student[]) => void;
   onSelectStudentForExam?: (student: Student) => void;
   onRefreshStudents?: () => Promise<void>;
+  onStudentsLoaded?: (students: Student[]) => void;
 }
 
 export const StudentManager: React.FC<StudentManagerProps> = ({
@@ -44,6 +49,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   onBulkAddStudents,
   onSelectStudentForExam,
   onRefreshStudents,
+  onStudentsLoaded,
 }) => {
   // Sync state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -95,6 +101,67 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
   // Status notification message
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
+
+  // Sync students directly to Google Drive subfolder "Data Siswa"
+  const handleSyncStudentsToDrive = async () => {
+    setIsDriveSyncing(true);
+    setFeedback(null);
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const res = await googleSignIn();
+        if (res) token = res.accessToken;
+        else {
+          setIsDriveSyncing(false);
+          return;
+        }
+      }
+      await saveStudentsToDrive(students, token);
+      setFeedback({
+        type: 'success',
+        text: `Berhasil menyimpan data ${students.length} siswa ke Google Drive folder "Data Siswa"! Akses Reader publik aktif.`,
+      });
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message || 'Gagal menyimpan data siswa ke Google Drive.' });
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
+
+  // Load students directly from Google Drive subfolder "Data Siswa"
+  const handleLoadStudentsFromDrive = async () => {
+    setIsDriveSyncing(true);
+    setFeedback(null);
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const res = await googleSignIn();
+        if (res) token = res.accessToken;
+        else {
+          setIsDriveSyncing(false);
+          return;
+        }
+      }
+      const driveStudents = await loadStudentsFromDrive(token);
+      if (driveStudents && driveStudents.length > 0 && onStudentsLoaded) {
+        onStudentsLoaded(driveStudents);
+        setFeedback({
+          type: 'success',
+          text: `Berhasil memuat ${driveStudents.length} data siswa langsung dari Google Drive!`,
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          text: 'Belum ada file data siswa yang tersimpan di Google Drive folder "Data Siswa".',
+        });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message || 'Gagal memuat data siswa dari Google Drive.' });
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
 
   // Available classes computed from standard SD, SMP, SMA options + student list
   const defaultClasses = CLASS_ROSTER_OPTIONS.flatMap((g) => g.classes);
@@ -462,6 +529,26 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
           >
             <Upload className="w-4 h-4 text-slate-600" />
             <span>Impor Massal</span>
+          </button>
+
+          <button
+            onClick={handleSyncStudentsToDrive}
+            disabled={isDriveSyncing || students.length === 0}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-all border border-blue-200 shadow-sm disabled:opacity-50"
+            title="Simpan data siswa ke Google Drive folder 'CBT Web App - Backup / Data Siswa'"
+          >
+            <Cloud className="w-4 h-4" />
+            <span>{isDriveSyncing ? 'Menyimpan...' : 'Simpan ke GDrive'}</span>
+          </button>
+
+          <button
+            onClick={handleLoadStudentsFromDrive}
+            disabled={isDriveSyncing}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            title="Muat data siswa langsung dari folder Data Siswa di Google Drive"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isDriveSyncing ? 'animate-spin' : ''}`} />
+            <span>Muat dari GDrive</span>
           </button>
 
           <button

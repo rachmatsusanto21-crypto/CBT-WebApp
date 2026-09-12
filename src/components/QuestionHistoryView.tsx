@@ -90,8 +90,11 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
       let token = await getAccessToken();
       if (!token) {
         const authRes = await googleSignIn();
-        if (authRes) token = authRes.accessToken;
-        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+        if (authRes) {
+          token = authRes.accessToken;
+        } else {
+          return;
+        }
       }
 
       const fileRes = await saveQuestionPackageToDrive(pkg, token);
@@ -122,8 +125,11 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
       let token = await getAccessToken();
       if (!token) {
         const authRes = await googleSignIn();
-        if (authRes) token = authRes.accessToken;
-        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+        if (authRes) {
+          token = authRes.accessToken;
+        } else {
+          return;
+        }
       }
 
       await saveAllQuestionPackagesToDrive(packages, token);
@@ -148,8 +154,11 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
       let token = await getAccessToken();
       if (!token) {
         const authRes = await googleSignIn();
-        if (authRes) token = authRes.accessToken;
-        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+        if (authRes) {
+          token = authRes.accessToken;
+        } else {
+          return;
+        }
       }
 
       const drivePackages = await loadQuestionHistoryFromDrive(token);

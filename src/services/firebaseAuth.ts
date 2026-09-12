@@ -22,8 +22,20 @@ provider.setCustomParameters({
 
 // Flag to indicate if we are in the middle of a sign-in flow
 let isSigningIn = false;
-// Cache the access token strictly in memory (per security guidelines)
-let cachedAccessToken: string | null = null;
+// Cache access token with localStorage persistence so reloads don't lose Drive connectivity
+let cachedAccessToken: string | null = (() => {
+  try {
+    const stored = localStorage.getItem('cbt_gdrive_access_token');
+    const ts = localStorage.getItem('cbt_gdrive_token_timestamp');
+    if (stored && ts) {
+      const ageHours = (Date.now() - parseInt(ts, 10)) / (1000 * 60 * 60);
+      if (ageHours < 4) {
+        return stored;
+      }
+    }
+  } catch {}
+  return null;
+})();
 let currentUser: User | null = null;
 
 // Subscribers for auth state changes
@@ -88,9 +100,31 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     cachedAccessToken = credential.accessToken;
     currentUser = result.user;
+    try {
+      localStorage.setItem('cbt_gdrive_access_token', credential.accessToken);
+      localStorage.setItem('cbt_gdrive_token_timestamp', Date.now().toString());
+    } catch {}
     notifyListeners();
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
+    const errorCode = error?.code || '';
+    if (
+      errorCode === 'auth/popup-closed-by-user' ||
+      errorCode === 'auth/cancelled-popup-request' ||
+      errorCode === 'auth/user-cancelled'
+    ) {
+      // Benign user action: user closed or dismissed the popup window
+      console.info('Google sign-in popup was closed by user.');
+      return null;
+    }
+
+    if (errorCode === 'auth/popup-blocked') {
+      console.warn('Google sign-in popup was blocked by browser.');
+      throw new Error(
+        'Jendela popup diblokir oleh browser. Silakan izinkan popup pada peramban Anda untuk menghubungkan Google Drive.'
+      );
+    }
+
     console.error('Sign in error:', error);
     throw error;
   } finally {
@@ -119,5 +153,9 @@ export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
   currentUser = null;
+  try {
+    localStorage.removeItem('cbt_gdrive_access_token');
+    localStorage.removeItem('cbt_gdrive_token_timestamp');
+  } catch {}
   notifyListeners();
 };

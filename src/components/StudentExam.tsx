@@ -20,6 +20,7 @@ import {
 import { Student, Exam, ExamResult, Question, SchoolSettings } from '../types';
 import { Letterhead } from './Letterhead';
 import { safeFetchJson } from '../utils/apiHelper';
+import { decodeExamPayload } from '../utils/examUrlEncoder';
 
 interface StudentExamProps {
   students: Student[];
@@ -29,6 +30,7 @@ interface StudentExamProps {
   preselectedExam?: Exam | null;
   onViolationOccurred: () => void;
   onExamSubmitted: (result: ExamResult) => void;
+  onExamLoaded?: (exam: Exam) => void;
 }
 
 export const StudentExam: React.FC<StudentExamProps> = ({
@@ -39,11 +41,12 @@ export const StudentExam: React.FC<StudentExamProps> = ({
   preselectedExam,
   onViolationOccurred,
   onExamSubmitted,
+  onExamLoaded,
 }) => {
   // Login State
   const [selectedStudentName, setSelectedStudentName] = useState<string>('');
   const [inputToken, setInputToken] = useState<string>('');
-  const [selectedExamId, setSelectedExamId] = useState<string>(preselectedExam?.id || exams[0]?.id || '');
+  const [selectedExamId, setSelectedExamId] = useState<string>(preselectedExam?.id || '');
   const [loginError, setLoginError] = useState<string>('');
 
   // Pre-fill selected student if passed from StudentManager
@@ -65,27 +68,87 @@ export const StudentExam: React.FC<StudentExamProps> = ({
       const params = new URLSearchParams(window.location.search);
       const codeParam = params.get('examCode') || params.get('code');
       const tokenParam = params.get('token');
+      const payloadParam = params.get('p');
+      const driveIdParam = params.get('driveId');
 
-      if (codeParam && exams.length > 0) {
+      // 1. Direct encoded payload in URL (self-contained, works on Vercel & offline)
+      if (payloadParam) {
+        const decoded = decodeExamPayload(payloadParam);
+        if (decoded) {
+          if (onExamLoaded) {
+            onExamLoaded(decoded);
+          }
+          setSelectedExamId(decoded.id);
+          setInputToken(tokenParam || decoded.token);
+          setLoginError('');
+          return;
+        }
+      }
+
+      // 2. Drive File ID in URL
+      if (driveIdParam) {
+        fetch(`https://drive.google.com/uc?id=${driveIdParam}&export=download`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.questions) {
+              if (onExamLoaded) onExamLoaded(data);
+              setSelectedExamId(data.id);
+              setInputToken(tokenParam || data.token);
+              setLoginError('');
+            }
+          })
+          .catch(() => {});
+      }
+
+      // 3. Search by codeParam in provided exams
+      if (codeParam) {
         const matching = exams.find(
           (e) => e.code.toUpperCase() === codeParam.toUpperCase() || e.id === codeParam
         );
         if (matching) {
           setSelectedExamId(matching.id);
           setInputToken(tokenParam || matching.token);
+          setLoginError('');
           return;
         }
+
+        // Check local storage cache
+        try {
+          const cachedStr = localStorage.getItem('cbt_exams_cache');
+          if (cachedStr) {
+            const cachedList: Exam[] = JSON.parse(cachedStr);
+            const foundCached = cachedList.find(
+              (e) => e.code.toUpperCase() === codeParam.toUpperCase() || e.id === codeParam
+            );
+            if (foundCached) {
+              if (onExamLoaded) onExamLoaded(foundCached);
+              setSelectedExamId(foundCached.id);
+              setInputToken(tokenParam || foundCached.token);
+              setLoginError('');
+              return;
+            }
+          }
+        } catch {}
+
+        // If codeParam was specified but not found, DO NOT fall back to AI Studio exam!
+        setLoginError(
+          `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan tautan pengerjaan sudah lengkap atau hubungi guru pengawas.`
+        );
+        return;
       }
 
-      // If no preselected exam and current selectedExamId is invalid, choose first available
-      if (exams.length > 0 && (!selectedExamId || !exams.some((e) => e.id === selectedExamId))) {
-        setSelectedExamId(exams[0].id);
-        setInputToken(exams[0].token);
+      // 4. Default: If no URL code was specified and no preselected exam, choose first user exam if available
+      if (exams.length > 0 && !selectedExamId) {
+        // Prioritize non-sample exam if exists
+        const nonSample = exams.find((e) => e.id !== 'exam-1' && e.id !== 'exam-2' && e.code !== 'MAT101' && e.code !== 'IPA202');
+        const defaultExam = nonSample || exams[0];
+        setSelectedExamId(defaultExam.id);
+        setInputToken(defaultExam.token);
       }
     } catch {
       // Ignore URL parsing errors
     }
-  }, [preselectedExam, exams]);
+  }, [preselectedExam, exams, onExamLoaded]);
 
   // Active Exam State
   const [activeExam, setActiveExam] = useState<Exam | null>(null);

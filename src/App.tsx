@@ -9,9 +9,12 @@ import { PrintExamView } from './components/PrintExamView';
 import { ResultsTable } from './components/ResultsTable';
 import { GASCodeViewer } from './components/GASCodeViewer';
 import { SettingsManager } from './components/SettingsManager';
+import { GoogleDriveManager } from './components/GoogleDriveManager';
 import { Exam, Student, SchoolSettings, MonitoringStudent, ExamResult, SavedQuestionPackage, ExamType } from './types';
 import { initialExams, initialStudents, initialSchoolSettings, initialSavedPackages } from './initialData';
 import { safeFetchJson } from './utils/apiHelper';
+import { getCachedAccessToken } from './services/firebaseAuth';
+import { saveFullBackupToDrive } from './services/googleDriveService';
 
 // Helper to get initial exams safely respecting cache & deleted list
 const getInitialExams = (): Exam[] => {
@@ -56,7 +59,7 @@ const getInitialSavedPackages = (): SavedQuestionPackage[] => {
 export default function App() {
   // Mode: 'siswa' or 'admin'
   const [currentMode, setCurrentMode] = useState<'siswa' | 'admin'>('siswa');
-  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings'>('monitoring');
+  const [adminTab, setAdminTab] = useState<'monitoring' | 'bank-soal' | 'riwayat-soal' | 'data-siswa' | 'cetak' | 'rekap' | 'gas' | 'settings' | 'gdrive'>('monitoring');
 
   // Core Data State with localStorage cache fallback
   const [exams, setExams] = useState<Exam[]>(getInitialExams);
@@ -527,6 +530,67 @@ export default function App() {
     loadInitialData();
   };
 
+  // Handle newly loaded exam from direct student link or Google Drive
+  const handleExamLoaded = (loadedExam: Exam) => {
+    setExams((prev) => {
+      const exists = prev.some((e) => e.id === loadedExam.id || e.code === loadedExam.code);
+      if (exists) {
+        return prev.map((e) => (e.id === loadedExam.id || e.code === loadedExam.code ? loadedExam : e));
+      }
+      const updated = [loadedExam, ...prev];
+      try {
+        localStorage.setItem('cbt_exams_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  // Purge sample/demo data (AI Studio defaults) so only user-created content exists
+  const handlePurgeSampleData = async () => {
+    // 1. Filter out sample exams
+    const realExams = exams.filter((e) => e.id !== 'exam-1' && e.id !== 'exam-2' && e.code !== 'MAT101' && e.code !== 'IPA202');
+    setExams(realExams);
+    try {
+      const deletedExamIds = ['exam-1', 'exam-2'];
+      localStorage.setItem('cbt_deleted_exam_ids', JSON.stringify(deletedExamIds));
+      localStorage.setItem('cbt_exams_cache', JSON.stringify(realExams));
+    } catch {}
+
+    // 2. Filter out sample packages
+    const realPackages = savedPackages.filter((p) => p.id !== 'pkg-pancasila-1' && !(p.title && p.title.toLowerCase().includes('pancasila')));
+    setSavedPackages(realPackages);
+    try {
+      const deletedPkgIds = ['pkg-pancasila-1'];
+      localStorage.setItem('cbt_deleted_package_ids', JSON.stringify(deletedPkgIds));
+      localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(realPackages));
+    } catch {}
+
+    // 3. Filter out sample students
+    const realStudents = students.filter((s) => !(/^std-(10|[1-9])$/.test(s.id)) && s.name !== 'Ahmad Dahlan');
+    setStudents(realStudents);
+    try {
+      localStorage.setItem('cbt_students_cache', JSON.stringify(realStudents));
+    } catch {}
+
+    // 4. Notify backend server
+    await safeFetchJson('/api/purge-sample-data', { method: 'POST' }).catch(() => {});
+
+    // 5. If Google Drive is connected, push clean backup immediately
+    const token = getCachedAccessToken();
+    if (token) {
+      await saveFullBackupToDrive(
+        {
+          exams: realExams,
+          savedPackages: realPackages,
+          students: realStudents,
+          schoolSettings,
+          timestamp: new Date().toISOString(),
+        },
+        token
+      ).catch(() => {});
+    }
+  };
+
   // Count active violations for warning badge
   const activeViolationsCount = monitoringList.filter((m) => m.tabSwitches > 0).length;
 
@@ -555,6 +619,7 @@ export default function App() {
             preselectedExam={preselectedExam}
             onViolationOccurred={loadInitialData}
             onExamSubmitted={handleExamSubmitted}
+            onExamLoaded={handleExamLoaded}
           />
         ) : (
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -604,6 +669,17 @@ export default function App() {
                 onBulkAddStudents={handleBulkAddStudents}
                 onSelectStudentForExam={handleSelectStudentForExam}
                 onRefreshStudents={handleRefreshStudents}
+                onStudentsLoaded={(loadedStudents) => {
+                  setStudents((prev) => {
+                    const loadedMap = new Map(loadedStudents.map((s) => [s.id, s]));
+                    const filtered = prev.filter((s) => !loadedMap.has(s.id));
+                    const merged = [...loadedStudents, ...filtered];
+                    try {
+                      localStorage.setItem('cbt_students_cache', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  });
+                }}
               />
             )}
 
@@ -624,6 +700,49 @@ export default function App() {
             )}
 
             {adminTab === 'gas' && <GASCodeViewer />}
+
+            {adminTab === 'gdrive' && (
+              <GoogleDriveManager
+                exams={exams}
+                savedPackages={savedPackages}
+                students={students}
+                schoolSettings={schoolSettings}
+                onExamsLoaded={(loadedExams) => {
+                  setExams((prev) => {
+                    const loadedMap = new Map(loadedExams.map((e) => [e.id, e]));
+                    const filtered = prev.filter((e) => !loadedMap.has(e.id));
+                    const merged = [...loadedExams, ...filtered];
+                    try {
+                      localStorage.setItem('cbt_exams_cache', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  });
+                }}
+                onPackagesLoaded={(loadedPkgs) => {
+                  setSavedPackages((prev) => {
+                    const loadedMap = new Map(loadedPkgs.map((p) => [p.id, p]));
+                    const filtered = prev.filter((p) => !loadedMap.has(p.id));
+                    const merged = [...loadedPkgs, ...filtered];
+                    try {
+                      localStorage.setItem('cbt_saved_packages_cache', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  });
+                }}
+                onStudentsLoaded={(loadedStudents) => {
+                  setStudents((prev) => {
+                    const loadedMap = new Map(loadedStudents.map((s) => [s.id, s]));
+                    const filtered = prev.filter((s) => !loadedMap.has(s.id));
+                    const merged = [...loadedStudents, ...filtered];
+                    try {
+                      localStorage.setItem('cbt_students_cache', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  });
+                }}
+                onPurgeSampleData={handlePurgeSampleData}
+              />
+            )}
 
             {adminTab === 'settings' && <SettingsManager />}
           </main>

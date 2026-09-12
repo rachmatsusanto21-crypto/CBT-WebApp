@@ -105,6 +105,19 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Diagnostic status check
+app.get("/api/status", (req, res) => {
+  res.json({
+    status: "ok",
+    mode: "express/cloud-run",
+    uptime: Math.round(process.uptime()),
+    examsCount: exams.length,
+    studentsCount: students.length,
+    savedPackagesCount: savedPackages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Initial state
 app.get("/api/initial-state", (req, res) => {
   res.json({
@@ -133,15 +146,15 @@ app.put("/api/settings", (req, res) => {
 app.post("/api/sync-all", (req, res) => {
   try {
     const { exams: clientExams, savedPackages: clientPackages, students: clientStudents, schoolSettings: clientSettings } = req.body;
-    if (Array.isArray(clientExams) && clientExams.length > 0) {
+    if (Array.isArray(clientExams)) {
       exams = clientExams;
       userHasCreatedData = true;
     }
-    if (Array.isArray(clientPackages) && clientPackages.length > 0) {
+    if (Array.isArray(clientPackages)) {
       savedPackages = clientPackages;
       userHasCreatedData = true;
     }
-    if (Array.isArray(clientStudents) && clientStudents.length > 0) {
+    if (Array.isArray(clientStudents)) {
       students = clientStudents;
     }
     if (clientSettings) {
@@ -149,6 +162,20 @@ app.post("/api/sync-all", (req, res) => {
     }
     persistStore();
     res.json({ success: true, examsCount: exams.length, packagesCount: savedPackages.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Purge default sample data (AI Studio initial data) so only teacher created data remains
+app.post("/api/purge-sample-data", (req, res) => {
+  try {
+    exams = exams.filter((e) => e.id !== "exam-1" && e.id !== "exam-2" && e.code !== "MAT101" && e.code !== "IPA202");
+    savedPackages = savedPackages.filter((p) => p.id !== "pkg-pancasila-1" && !(p.title && p.title.toLowerCase().includes("pancasila")));
+    students = students.filter((s) => !(/^std-(10|[1-9])$/.test(s.id)) && s.name !== "Ahmad Dahlan");
+    userHasCreatedData = true;
+    persistStore();
+    res.json({ success: true, examsCount: exams.length, packagesCount: savedPackages.length, studentsCount: students.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
