@@ -18,6 +18,11 @@ import {
   Radio,
   Check,
   Zap,
+  Copy,
+  Key,
+  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   googleSignIn,
@@ -26,6 +31,10 @@ import {
   getAccessToken,
   getCurrentUser,
   getCachedAccessToken,
+  getFirebaseSettingsUrl,
+  getCurrentDomain,
+  setManualAccessToken,
+  requestGsiAccessToken,
 } from '../services/firebaseAuth';
 import {
   ensureDriveStructure,
@@ -86,6 +95,16 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
   // Purge sample modal / confirmation
   const [isPurging, setIsPurging] = useState(false);
   const [purgeMessage, setPurgeMessage] = useState<string | null>(null);
+
+  // Unauthorized domain resolution state
+  const [unauthorizedDomainInfo, setUnauthorizedDomainInfo] = useState<{
+    domain: string;
+    settingsUrl: string;
+  } | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const [manualTokenInput, setManualTokenInput] = useState('');
+  const [manualEmailInput, setManualEmailInput] = useState('');
+  const [showManualToken, setShowManualToken] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeAuth((user, token) => {
@@ -162,6 +181,59 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
     }
   };
 
+  const handleCopyDomain = () => {
+    const domain = unauthorizedDomainInfo?.domain || getCurrentDomain() || window.location.hostname;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(domain);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 3000);
+    }
+  };
+
+  const handleConnectViaGsi = async () => {
+    setIsConnecting(true);
+    setErrorMessage(null);
+    try {
+      const res = await requestGsiAccessToken();
+      if (res) {
+        setAccessToken(res.accessToken);
+        setUnauthorizedDomainInfo(null);
+        setSyncStatus('Terhubung ke Google Drive via Google Identity Services! Menyiapkan folder...');
+        const structure = await ensureDriveStructure(res.accessToken);
+        setFolderStructure(structure);
+        setSyncStatus('Struktur folder "CBT Web App - Backup" siap di Google Drive.');
+        setTimeout(() => setSyncStatus(null), 4000);
+        handleCheckDrive();
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Gagal menghubungkan Google Drive via GSI.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleApplyManualToken = async () => {
+    if (!manualTokenInput.trim()) {
+      setErrorMessage('Harap masukkan token akses Google Drive OAuth.');
+      return;
+    }
+    try {
+      const token = manualTokenInput.trim();
+      setManualAccessToken(token, manualEmailInput.trim() || 'rachmatsusanto21@guru.sd.belajar.id');
+      setAccessToken(token);
+      setSyncStatus('Memvalidasi token akses Google Drive...');
+      const structure = await ensureDriveStructure(token);
+      setFolderStructure(structure);
+      setUnauthorizedDomainInfo(null);
+      setShowManualToken(false);
+      setSyncStatus('Token berhasil diterapkan! Folder "CBT Web App - Backup" terhubung.');
+      setTimeout(() => setSyncStatus(null), 4000);
+      handleCheckDrive();
+    } catch (err: any) {
+      setErrorMessage(`Token tidak valid atau kadaluarsa: ${err.message}`);
+    }
+  };
+
   const handleConnectDrive = async () => {
     setIsConnecting(true);
     setErrorMessage(null);
@@ -169,6 +241,7 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
       const result = await googleSignIn();
       if (result) {
         setAccessToken(result.accessToken);
+        setUnauthorizedDomainInfo(null);
         setSyncStatus('Terhubung ke Google Drive! Menyiapkan struktur folder...');
         const structure = await ensureDriveStructure(result.accessToken);
         setFolderStructure(structure);
@@ -177,6 +250,12 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
         handleCheckDrive();
       }
     } catch (err: any) {
+      if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+        setUnauthorizedDomainInfo({
+          domain: err.domain || getCurrentDomain() || window.location.hostname,
+          settingsUrl: err.settingsUrl || getFirebaseSettingsUrl(),
+        });
+      }
       setErrorMessage(err.message || 'Gagal menghubungkan akun Google Drive');
     } finally {
       setIsConnecting(false);
@@ -613,7 +692,128 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
         {errorMessage && (
           <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3.5 rounded-2xl text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-            <span>{errorMessage}</span>
+            <span className="flex-1">{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Specialized Resolution Banner for auth/unauthorized-domain */}
+        {unauthorizedDomainInfo && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 space-y-4 text-slate-800 shadow-sm">
+            <div className="flex items-start space-x-3">
+              <ShieldAlert className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-bold text-sm text-amber-950">
+                  Panduan Penyelesaian: Daftarkan Domain di Firebase Console
+                </h4>
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  Firebase Authentication memblokir pop-up karena domain aplikasi saat ini belum ditambahkan ke daftar <strong>Authorized Domains</strong>. Ikuti langkah mudah berikut:
+                </p>
+              </div>
+            </div>
+
+            {/* Step 1: Copy domain */}
+            <div className="bg-white rounded-xl border border-amber-200 p-3.5 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                1. Domain yang harus didaftarkan:
+              </div>
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <code className="text-xs font-mono text-slate-800 flex-1 break-all select-all font-semibold">
+                  {unauthorizedDomainInfo.domain}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyDomain}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md flex items-center space-x-1 transition-colors flex-shrink-0"
+                >
+                  {copiedDomain ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedDomain ? 'Tersalin!' : 'Salin Domain'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Step 2: Open Firebase Console & Add domain */}
+            <div className="bg-white rounded-xl border border-amber-200 p-3.5 space-y-2.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                2. Langkah di Firebase Console:
+              </div>
+              <ol className="text-xs text-slate-700 space-y-1.5 list-decimal list-inside leading-relaxed">
+                <li>Klik tombol di bawah untuk membuka halaman <strong>Firebase Authentication Settings</strong>.</li>
+                <li>Pilih tab <strong>Authorized domains</strong> (Domain yang diotorisasi).</li>
+                <li>Klik <strong>Add domain</strong> (Tambahkan domain), lalu tempel domain yang sudah disalin di atas.</li>
+                <li>Klik <strong>Save</strong> (Simpan), lalu kembali ke sini dan klik <strong>Hubungkan Google Drive</strong>.</li>
+              </ol>
+              <div className="pt-1">
+                <a
+                  href={unauthorizedDomainInfo.settingsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-colors"
+                >
+                  <span>Buka Firebase Console Settings</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Step 3: Instant alternative options (GSI / Manual Token) */}
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200">
+              <button
+                type="button"
+                onClick={handleConnectViaGsi}
+                disabled={isConnecting}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Coba Masuk via Google Identity Services (GSI)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowManualToken(!showManualToken)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+              >
+                <Key className="w-3.5 h-3.5 text-slate-600" />
+                <span>{showManualToken ? 'Tutup Input Manual' : 'Masukkan Token Akses Manual'}</span>
+                {showManualToken ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Manual Token Input Box */}
+            {showManualToken && (
+              <div className="bg-white rounded-xl border border-amber-300 p-3.5 space-y-2 mt-2">
+                <div className="text-xs font-bold text-slate-800">
+                  Gunakan Token Akses OAuth Google Drive secara Langsung:
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Bila Anda memiliki token OAuth yang diperoleh dari Google Cloud Console atau OAuth Playground, Anda dapat menempelkannya di sini untuk langsung mengaktifkan sinkronisasi.
+                </p>
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={manualTokenInput}
+                    onChange={(e) => setManualTokenInput(e.target.value)}
+                    placeholder="Tempel OAuth Access Token (ya29....)"
+                    className="w-full text-xs font-mono px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="email"
+                      value={manualEmailInput}
+                      onChange={(e) => setManualEmailInput(e.target.value)}
+                      placeholder="Email Akun Google (opsional)"
+                      className="flex-1 text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyManualToken}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors flex-shrink-0"
+                    >
+                      Terapkan Token
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

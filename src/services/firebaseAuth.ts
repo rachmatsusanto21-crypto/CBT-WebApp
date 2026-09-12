@@ -86,10 +86,94 @@ export const initAuth = (
   });
 };
 
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+export const getFirebaseSettingsUrl = (): string => {
+  return `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`;
+};
+
+export const getCurrentDomain = (): string => {
+  return typeof window !== 'undefined' ? window.location.hostname : '';
+};
+
+/**
+ * Fallback to Google Identity Services (GSI) OAuth 2.0 token client
+ * when Firebase throws auth/unauthorized-domain.
+ */
+export const requestGsiAccessToken = (): Promise<{ accessToken: string } | null> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      return reject(new Error('Window context tidak ditemukan.'));
+    }
+
+    const clientId = firebaseConfig.oAuthClientId;
+    if (!clientId) {
+      return reject(new Error('OAuth Client ID tidak ditemukan di konfigurasi firebase-applet-config.json.'));
+    }
+
+    const launchClient = () => {
+      if (!window.google?.accounts?.oauth2) {
+        return reject(new Error('Google Identity Services library belum termuat.'));
+      }
+
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+          callback: (response: any) => {
+            if (response.error) {
+              if (response.error === 'access_denied') {
+                resolve(null);
+                return;
+              }
+              reject(new Error(`GSI OAuth: ${response.error_description || response.error}`));
+              return;
+            }
+            if (response.access_token) {
+              cachedAccessToken = response.access_token;
+              try {
+                localStorage.setItem('cbt_gdrive_access_token', response.access_token);
+                localStorage.setItem('cbt_gdrive_token_timestamp', Date.now().toString());
+              } catch {}
+              notifyListeners();
+              resolve({ accessToken: response.access_token });
+            } else {
+              reject(new Error('Tidak ada token akses yang dikembalikan oleh Google OAuth.'));
+            }
+          },
+          error_callback: (nonOAuthError: any) => {
+            reject(new Error(nonOAuthError?.message || 'Gagal membuka otentikasi Google Identity Services.'));
+          },
+        });
+
+        client.requestAccessToken({ prompt: 'consent' });
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    if (window.google?.accounts?.oauth2) {
+      launchClient();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => launchClient();
+      script.onerror = () => reject(new Error('Gagal memuat pustaka Google Identity Services.'));
+      document.head.appendChild(script);
+    }
+  });
+};
+
 /**
  * Must be called from a button click or user interaction
  */
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const googleSignIn = async (): Promise<{ user: User | any; accessToken: string } | null> => {
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -125,11 +209,53 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       );
     }
 
+    // Specific handling for unauthorized-domain error
+    if (errorCode === 'auth/unauthorized-domain') {
+      console.warn('Firebase unauthorized domain detected. Trying Google Identity Services (GSI) fallback...');
+      try {
+        const gsiResult = await requestGsiAccessToken();
+        if (gsiResult) {
+          const fallbackUser = {
+            uid: 'gdrive-authenticated-user',
+            displayName: 'Akun Google Terhubung',
+            email: 'rachmatsusanto21@guru.sd.belajar.id',
+          };
+          currentUser = fallbackUser as any;
+          return { user: fallbackUser, accessToken: gsiResult.accessToken };
+        }
+        return null;
+      } catch (gsiErr: any) {
+        console.warn('GSI fallback was also rejected or unavailable:', gsiErr);
+        const domain = getCurrentDomain();
+        const customError: any = new Error(
+          `Domain "${domain}" belum diizinkan oleh Firebase Authentication. Daftarkan domain ini di Firebase Console (Authentication > Settings > Authorized Domains).`
+        );
+        customError.code = 'auth/unauthorized-domain';
+        customError.domain = domain;
+        customError.settingsUrl = getFirebaseSettingsUrl();
+        throw customError;
+      }
+    }
+
     console.error('Sign in error:', error);
     throw error;
   } finally {
     isSigningIn = false;
   }
+};
+
+export const setManualAccessToken = (token: string, email?: string) => {
+  cachedAccessToken = token.trim();
+  currentUser = {
+    uid: 'manual-token-user',
+    displayName: 'Akun Google (Token Akses)',
+    email: email || 'rachmatsusanto21@guru.sd.belajar.id',
+  } as any;
+  try {
+    localStorage.setItem('cbt_gdrive_access_token', token.trim());
+    localStorage.setItem('cbt_gdrive_token_timestamp', Date.now().toString());
+  } catch {}
+  notifyListeners();
 };
 
 export const getCachedAccessToken = (): string | null => {
