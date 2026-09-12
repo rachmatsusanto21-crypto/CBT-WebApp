@@ -349,6 +349,25 @@ export async function saveActiveExamsToDrive(
 }
 
 /**
+ * Saves a single active exam into subfolder "Paket Ujian Aktif"
+ * with public read permission
+ */
+export async function saveActiveExamToDrive(
+  exam: Exam,
+  accessToken: string
+): Promise<DriveFileInfo> {
+  const structure = await ensureDriveStructure(accessToken);
+  const cleanCode = (exam.code || 'EXAM').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return saveJsonToDrive(
+    `ujian_${cleanCode}.json`,
+    exam,
+    structure.paketUjianFolderId,
+    accessToken,
+    true
+  );
+}
+
+/**
  * Saves student master data into subfolder "Data Siswa"
  */
 export async function saveStudentsToDrive(

@@ -17,10 +17,20 @@ import {
   ChevronUp,
   Sparkles,
   AlertCircle,
-  BookOpen
+  BookOpen,
+  Cloud,
+  CloudCheck,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { SavedQuestionPackage, Exam, QuestionType, ExamType } from '../types';
 import { SUBJECT_OPTIONS, EXAM_TYPE_OPTIONS } from '../initialData';
+import { googleSignIn, getAccessToken } from '../services/firebaseAuth';
+import {
+  saveQuestionPackageToDrive,
+  saveAllQuestionPackagesToDrive,
+  loadQuestionHistoryFromDrive,
+} from '../services/googleDriveService';
 
 interface QuestionHistoryViewProps {
   packages: SavedQuestionPackage[];
@@ -28,6 +38,7 @@ interface QuestionHistoryViewProps {
   onDeletePackage: (id: string) => Promise<void>;
   onSelectPrintExam?: (exam: Exam) => void;
   onNavigateToAI?: () => void;
+  onPackagesUpdated?: (packages: SavedQuestionPackage[]) => void;
 }
 
 export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
@@ -36,6 +47,7 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
   onDeletePackage,
   onSelectPrintExam,
   onNavigateToAI,
+  onPackagesUpdated,
 }) => {
   // Filter & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +67,107 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploySuccess, setDeploySuccess] = useState<string>('');
   const [deployError, setDeployError] = useState<string>('');
+
+  // Google Drive State
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+  const [driveSyncMessage, setDriveSyncMessage] = useState<string>('');
+  const [driveErrorMessage, setDriveErrorMessage] = useState<string>('');
+  const [packageDriveLinks, setPackageDriveLinks] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('cbt_gdrive_package_links');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Save single question package to Google Drive under "Data Soal" with public reader access
+  const handleSavePackageToDrive = async (pkg: SavedQuestionPackage) => {
+    setIsSyncingDrive(true);
+    setDriveErrorMessage('');
+    setDriveSyncMessage('');
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const authRes = await googleSignIn();
+        if (authRes) token = authRes.accessToken;
+        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+      }
+
+      const fileRes = await saveQuestionPackageToDrive(pkg, token);
+      const updatedLinks = { ...packageDriveLinks, [pkg.id]: fileRes.webViewLink || fileRes.fileId };
+      setPackageDriveLinks(updatedLinks);
+      try {
+        localStorage.setItem('cbt_gdrive_package_links', JSON.stringify(updatedLinks));
+      } catch {}
+
+      setDriveSyncMessage(
+        `Paket "${pkg.title}" berhasil disimpan di Google Drive folder "Data Soal"! Hak akses "Anyone with link (Reader)" telah aktif.`
+      );
+      setTimeout(() => setDriveSyncMessage(''), 5000);
+    } catch (err: any) {
+      setDriveErrorMessage(err.message || 'Gagal menyimpan paket ke Google Drive');
+    } finally {
+      setIsSyncingDrive(false);
+    }
+  };
+
+  // Save all packages to Google Drive folder "Data Soal"
+  const handleSyncAllPackagesToDrive = async () => {
+    if (packages.length === 0) return;
+    setIsSyncingDrive(true);
+    setDriveErrorMessage('');
+    setDriveSyncMessage('Menyimpan seluruh paket soal ke Google Drive folder "Data Soal"...');
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const authRes = await googleSignIn();
+        if (authRes) token = authRes.accessToken;
+        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+      }
+
+      await saveAllQuestionPackagesToDrive(packages, token);
+
+      setDriveSyncMessage(
+        `Berhasil menyimpan ${packages.length} paket soal ke Google Drive subfolder "Data Soal"! Siswa dapat mengakses soal dengan izin reader.`
+      );
+      setTimeout(() => setDriveSyncMessage(''), 6000);
+    } catch (err: any) {
+      setDriveErrorMessage(err.message || 'Gagal menyimpan semua paket ke Google Drive');
+    } finally {
+      setIsSyncingDrive(false);
+    }
+  };
+
+  // Load packages directly from Google Drive
+  const handleLoadFromDrive = async () => {
+    setIsSyncingDrive(true);
+    setDriveErrorMessage('');
+    setDriveSyncMessage('Memuat data paket soal dari Google Drive subfolder "Data Soal"...');
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const authRes = await googleSignIn();
+        if (authRes) token = authRes.accessToken;
+        else throw new Error('Harap hubungkan Google Drive terlebih dahulu.');
+      }
+
+      const drivePackages = await loadQuestionHistoryFromDrive(token);
+      if (drivePackages.length > 0) {
+        if (onPackagesUpdated) {
+          onPackagesUpdated(drivePackages);
+        }
+        setDriveSyncMessage(`Berhasil memuat ${drivePackages.length} paket soal dari Google Drive!`);
+      } else {
+        setDriveSyncMessage('Tidak ditemukan file paket soal di folder "Data Soal" Google Drive.');
+      }
+      setTimeout(() => setDriveSyncMessage(''), 5000);
+    } catch (err: any) {
+      setDriveErrorMessage(err.message || 'Gagal memuat paket soal dari Google Drive');
+    } finally {
+      setIsSyncingDrive(false);
+    }
+  };
 
   // Open deploy modal
   const openDeployModal = (pkg: SavedQuestionPackage) => {
@@ -122,16 +235,61 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
           </p>
         </div>
 
-        {onNavigateToAI && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={onNavigateToAI}
-            className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
+            type="button"
+            onClick={handleSyncAllPackagesToDrive}
+            disabled={isSyncingDrive || packages.length === 0}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-all border border-blue-200 shadow-sm disabled:opacity-50"
+            title="Simpan semua paket soal ke folder Google Drive 'CBT Web App - Backup / Data Soal'"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Buat Paket Soal Baru (AI)</span>
+            <Cloud className="w-4 h-4" />
+            <span>{isSyncingDrive ? 'Menyimpan...' : 'Simpan ke GDrive (Data Soal)'}</span>
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={handleLoadFromDrive}
+            disabled={isSyncingDrive}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200 shadow-sm disabled:opacity-50"
+            title="Muat paket soal langsung dari subfolder Data Soal di Google Drive"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDrive ? 'animate-spin' : ''}`} />
+            <span>Muat dari GDrive</span>
+          </button>
+
+          {onNavigateToAI && (
+            <button
+              onClick={onNavigateToAI}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Buat Paket Soal Baru (AI)</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Google Drive Status Messages */}
+      {driveSyncMessage && (
+        <div className="bg-blue-50 border border-blue-300 text-blue-900 p-4 rounded-2xl flex items-center justify-between text-xs sm:text-sm shadow-sm">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="font-semibold">{driveSyncMessage}</span>
+          </div>
+          <button onClick={() => setDriveSyncMessage('')} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+      )}
+
+      {driveErrorMessage && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+            <span>{driveErrorMessage}</span>
+          </div>
+          <button onClick={() => setDriveErrorMessage('')} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+      )}
 
       {deploySuccess && (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
@@ -247,6 +405,17 @@ export const QuestionHistoryView: React.FC<QuestionHistoryViewProps> = ({
                     </div>
 
                     <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSavePackageToDrive(pkg)}
+                        disabled={isSyncingDrive}
+                        className="flex items-center space-x-1 text-xs font-bold text-blue-700 hover:text-blue-800 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-200 transition-colors"
+                        title="Simpan ke Google Drive folder 'Data Soal' (Akses: Anyone with link can read)"
+                      >
+                        <Cloud className="w-3.5 h-3.5" />
+                        <span>GDrive</span>
+                      </button>
+
                       <button
                         onClick={() => setExpandedPkgId(isExpanded ? null : pkg.id)}
                         className="flex items-center space-x-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"

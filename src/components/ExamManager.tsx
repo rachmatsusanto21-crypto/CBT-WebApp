@@ -22,7 +22,10 @@ import {
   Sliders,
   Award,
   Copy,
-  Check
+  Check,
+  Cloud,
+  CloudCheck,
+  Share2,
 } from 'lucide-react';
 import { Exam, Question, QuestionType, ExamType, SavedQuestionPackage } from '../types';
 import { safeFetchJson } from '../utils/apiHelper';
@@ -37,6 +40,8 @@ import {
 } from '../initialData';
 import { QuestionEditModal } from './QuestionEditModal';
 import { ExamEditModal } from './ExamEditModal';
+import { getAccessToken, getCachedAccessToken, googleSignIn } from '../services/firebaseAuth';
+import { saveActiveExamToDrive, saveQuestionPackageToDrive } from '../services/googleDriveService';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -66,6 +71,42 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
   const [selectingExam, setSelectingExam] = useState<Exam | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [copiedStudentLink, setCopiedStudentLink] = useState<string | null>(null);
+  const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
+  const [driveToast, setDriveToast] = useState<string | null>(null);
+
+  // Copy direct student link for this specific exam
+  const handleCopyStudentLink = (ex: Exam) => {
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('mode', 'siswa');
+    url.searchParams.set('examCode', ex.code);
+    navigator.clipboard.writeText(url.toString());
+    setCopiedStudentLink(ex.id);
+    setTimeout(() => setCopiedStudentLink(null), 2500);
+  };
+
+  // Upload active exam to Google Drive folder "Paket Ujian Aktif" with public reader permission
+  const handleSaveActiveExamToDrive = async (ex: Exam) => {
+    setIsDriveSyncing(true);
+    setDriveToast(null);
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        const authRes = await googleSignIn();
+        if (authRes) token = authRes.accessToken;
+        else throw new Error('Harap hubungkan Google Drive terlebih dahulu');
+      }
+
+      await saveActiveExamToDrive(ex, token);
+      setDriveToast(`Paket ujian [${ex.code}] berhasil disimpan ke folder "Paket Ujian Aktif" di Google Drive! Akses publik (read) aktif.`);
+      setTimeout(() => setDriveToast(null), 5000);
+    } catch (err: any) {
+      setDriveToast(`Gagal menyimpan ke Google Drive: ${err.message}`);
+      setTimeout(() => setDriveToast(null), 5000);
+    } finally {
+      setIsDriveSyncing(false);
+    }
+  };
   // AI Generator Form State
   const [subject, setSubject] = useState<string>('Pendidikan Pancasila');
   const [examType, setExamType] = useState<ExamType>('Penilaian Tengah Semester');
@@ -249,8 +290,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         body: JSON.stringify(deployedPackage),
       }).catch((e) => console.warn('Server sync package warning:', e));
 
+      // 4. If Google Drive is connected, save directly to Google Drive folders with public read access
+      const token = getCachedAccessToken();
+      if (token) {
+        saveActiveExamToDrive(newExam, token).catch((e) => console.warn('Drive sync exam warning:', e));
+        saveQuestionPackageToDrive(deployedPackage, token).catch((e) => console.warn('Drive sync package warning:', e));
+      }
+
       setSaveSuccessMessage(
-        `Berhasil mendeploy paket ujian ${newExam.code}! Paket ujian aktif di CBT dan otomatis tersimpan di Riwayat Soal.`
+        `Berhasil mendeploy paket ujian ${newExam.code}! Paket ujian aktif di CBT, tersimpan di Riwayat Soal, dan disinkronkan ke Google Drive.`
       );
       setPreviewQuestions(null);
     } catch (err: any) {
@@ -291,8 +339,14 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         body: JSON.stringify(payload),
       }).catch((e) => console.warn('Server sync history warning:', e));
 
+      // If Google Drive is connected, save directly to Google Drive subfolder "Data Soal"
+      const token = getCachedAccessToken();
+      if (token) {
+        saveQuestionPackageToDrive(payload, token).catch((e) => console.warn('Drive sync package warning:', e));
+      }
+
       setSaveSuccessMessage(
-        `Paket soal berhasil disimpan ke dalam Riwayat Soal! Anda dapat mendeploy atau mencetak soal ini kapan saja.`
+        `Paket soal berhasil disimpan ke dalam Riwayat Soal dan disinkronkan ke Google Drive folder "Data Soal"!`
       );
       setPreviewQuestions(null);
     } catch (err: any) {
@@ -410,6 +464,18 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           )}
         </div>
       </div>
+
+      {driveToast && (
+        <div className="bg-blue-50 border border-blue-300 text-blue-900 p-4 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
+          <div className="flex items-center space-x-2">
+            <CloudCheck className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <span className="font-semibold">{driveToast}</span>
+          </div>
+          <button onClick={() => setDriveToast(null)} className="text-slate-400 hover:text-slate-600">
+            ✕
+          </button>
+        </div>
+      )}
 
       {saveSuccessMessage && (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
@@ -795,6 +861,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Pilih</span>
+                        </button>
+
+                        {/* Tombol Bagikan Link Siswa */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyStudentLink(ex)}
+                          title="Salin tautan ujian untuk siswa"
+                          className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl transition-colors border border-purple-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          {copiedStudentLink === ex.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-700">Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="w-3.5 h-3.5" />
+                              <span>Link Siswa</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Tombol Simpan ke GDrive */}
+                        <button
+                          type="button"
+                          onClick={() => handleSaveActiveExamToDrive(ex)}
+                          disabled={isDriveSyncing}
+                          title="Simpan paket ujian ini ke Google Drive (Paket Ujian Aktif)"
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl transition-colors border border-indigo-200 text-xs font-bold flex items-center space-x-1"
+                        >
+                          <Cloud className="w-3.5 h-3.5" />
+                          <span>GDrive</span>
                         </button>
 
                         {/* Tombol Edit */}
@@ -1367,6 +1465,36 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             </div>
 
             <div className="space-y-2 pt-1">
+              {/* Tombol Salin Link Ujian Siswa */}
+              <button
+                type="button"
+                onClick={() => handleCopyStudentLink(selectingExam)}
+                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-2"
+              >
+                {copiedStudentLink === selectingExam.id ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-300" />
+                    <span>Link Siswa Berhasil Disalin!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4" />
+                    <span>Salin Link Pengerjaan Siswa (Mode Siswa + Kode)</span>
+                  </>
+                )}
+              </button>
+
+              {/* Tombol Simpan ke GDrive */}
+              <button
+                type="button"
+                onClick={() => handleSaveActiveExamToDrive(selectingExam)}
+                disabled={isDriveSyncing}
+                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
+              >
+                <Cloud className="w-4 h-4" />
+                <span>Simpan ke GDrive (Paket Ujian Aktif - Akses Reader)</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {

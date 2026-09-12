@@ -53,13 +53,39 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     }
   }, [preselectedStudent]);
 
-  // Pre-fill selected exam if passed from ExamManager
+  // Pre-fill selected exam if passed from ExamManager or URL parameter
   useEffect(() => {
     if (preselectedExam && preselectedExam.id) {
       setSelectedExamId(preselectedExam.id);
       setInputToken(preselectedExam.token);
+      return;
     }
-  }, [preselectedExam]);
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const codeParam = params.get('examCode') || params.get('code');
+      const tokenParam = params.get('token');
+
+      if (codeParam && exams.length > 0) {
+        const matching = exams.find(
+          (e) => e.code.toUpperCase() === codeParam.toUpperCase() || e.id === codeParam
+        );
+        if (matching) {
+          setSelectedExamId(matching.id);
+          setInputToken(tokenParam || matching.token);
+          return;
+        }
+      }
+
+      // If no preselected exam and current selectedExamId is invalid, choose first available
+      if (exams.length > 0 && (!selectedExamId || !exams.some((e) => e.id === selectedExamId))) {
+        setSelectedExamId(exams[0].id);
+        setInputToken(exams[0].token);
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, [preselectedExam, exams]);
 
   // Active Exam State
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
