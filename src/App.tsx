@@ -16,6 +16,23 @@ import { safeFetchJson } from './utils/apiHelper';
 import { getCachedAccessToken } from './services/firebaseAuth';
 import { saveFullBackupToDrive } from './services/googleDriveService';
 
+// Import the database instance we just configured
+import { db } from "./firebase"; 
+import { collection, addDoc } from "firebase/firestore";
+
+// Example function using the imported 'db'
+async function saveEntry() {
+  try {
+    await addDoc(collection(db, "logs"), {
+      message: "App initialized successfully!",
+      createdAt: new Date()
+    });
+    console.info("Firestore entry saved successfully (logs).");
+  } catch (error) {
+    console.warn("Firestore saveEntry info:", error);
+  }
+}
+
 // Helper to get initial exams safely respecting cache & deleted list
 const getInitialExams = (): Exam[] => {
   try {
@@ -176,6 +193,7 @@ export default function App() {
 
   useEffect(() => {
     loadInitialData();
+    saveEntry();
   }, []);
 
   // Handle Exam creation

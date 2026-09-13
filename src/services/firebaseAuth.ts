@@ -1,4 +1,3 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
   signInWithPopup,
@@ -7,10 +6,10 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
+import { app } from '../firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App singleton safely
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Use unified Firebase App singleton
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
