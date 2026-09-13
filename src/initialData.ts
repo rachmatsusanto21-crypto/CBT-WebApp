@@ -202,22 +202,28 @@ export const EDUCATIONAL_IMAGE_PRESETS = [
 ];
 
 export const initialSchoolSettings: SchoolSettings = {
-  namaPemerintah: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
-  namaDinas: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
-  namaSekolah: 'SMA NEGERI 1 TELADAN JAKARTA',
-  alamatSekolah: 'Jl. Budi Utomo No. 7, Pasar Baru, Sawah Besar, Jakarta Pusat 10710',
-  teleponEmail: 'Telp: (021) 3865001 | Email: info@sman1teladan.sch.id | Website: cbt.sman1teladan.sch.id',
-  kepalaSekolah: 'Drs. H. Mulyadi, M.Pd.',
-  nipKepalaSekolah: '19720514 199802 1 003',
+  namaPemerintah: 'PEMERINTAH DAERAH KABUPATEN / KOTA',
+  namaDinas: 'DINAS PENDIDIKAN',
+  namaSekolah: 'SATUAN PENDIDIKAN CBT ONLINE',
+  alamatSekolah: 'Jl. Pendidikan No. 1',
+  teleponEmail: 'Telp: - | Email: sekolah@belajar.id',
+  kepalaSekolah: '',
+  nipKepalaSekolah: '',
   guruPengampu: 'Rachmat Susanto, S.Pd.',
-  nipGuruPengampu: '19850315 201001 1 012',
+  nipGuruPengampu: '-',
   tahunAjaran: '2025/2026',
   semester: 'Genap (Semester 2)',
-  logoPemdaUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Coat_of_arms_of_Jakarta.svg/400px-Coat_of_arms_of_Jakarta.svg.png',
+  logoPemdaUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg/400px-Coat_of_arms_of_Indonesia_Garuda_Pancasila.svg.png',
   logoSekolahUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg/400px-Logo_of_Ministry_of_Education_and_Culture_of_Republic_of_Indonesia.svg.png',
 };
 
-export const initialStudents: Student[] = [
+// Database Bersih: Default kosong tanpa noise sample AI Studio
+export const initialStudents: Student[] = [];
+export const initialExams: Exam[] = [];
+export const initialSavedPackages: SavedQuestionPackage[] = [];
+
+// Sample Demo Data (hanya dimuat jika pengguna secara manual memilih 'Muat Demo')
+export const sampleStudentsDemo: Student[] = [
   // Siswa Tingkat SMA (Kelas X)
   { id: 'std-1', nisn: '0071829101', name: 'Ahmad Fauzi Pratama', class: 'X-MIPA 1', noAbsen: 1, gender: 'L', status: 'Aktif' },
   { id: 'std-2', nisn: '0071829102', name: 'Siti Nurhaliza Putri', class: 'X-MIPA 1', noAbsen: 2, gender: 'P', status: 'Aktif' },
@@ -233,7 +239,7 @@ export const initialStudents: Student[] = [
   { id: 'std-10', nisn: '0103829203', name: 'Danendra Rafif Pratama', class: '6-B', noAbsen: 3, gender: 'L', status: 'Aktif' },
 ];
 
-export const initialExams: Exam[] = [
+export const sampleExamsDemo: Exam[] = [
   {
     id: 'exam-1',
     code: 'MTK101',
@@ -404,7 +410,7 @@ export const initialExams: Exam[] = [
   },
 ];
 
-export const initialSavedPackages: SavedQuestionPackage[] = [
+export const sampleSavedPackagesDemo: SavedQuestionPackage[] = [
   {
     id: 'pkg-pancasila-1',
     title: 'Asesmen Akhir Semester: Pendidikan Pancasila & Kewarganegaraan (Falsafah Negara & UUD 1945)',

@@ -87,12 +87,20 @@ export interface ViolationLog {
 export interface MonitoringStudent {
   studentName: string;
   examCode: string;
+  className?: string;
+  deviceInfo?: string;
+  currentQuestion?: number;
   progress: number;
   answeredCount: number;
   totalQuestions: number;
   status: 'Mengerjakan' | 'Selesai' | 'Terdeteksi Keluar Tab' | 'Terdiskualifikasi';
   tabSwitches: number;
   lastPing: string;
+  lastPingTimestamp?: number;
+  isOnline?: boolean;
+  score?: number;
+  activeWarning?: string | null;
+  pendingCommand?: string | null;
   violationsLog: ViolationLog[];
 }
 

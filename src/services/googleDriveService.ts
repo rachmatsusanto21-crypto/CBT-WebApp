@@ -62,18 +62,15 @@ export function isSampleStudent(std: Student): boolean {
 }
 
 export function filterRealExams(exams: Exam[]): Exam[] {
-  const real = exams.filter((e) => !isSampleExam(e));
-  return real.length > 0 ? real : exams;
+  return (exams || []).filter((e) => !isSampleExam(e));
 }
 
 export function filterRealPackages(packages: SavedQuestionPackage[]): SavedQuestionPackage[] {
-  const real = packages.filter((p) => !isSamplePackage(p));
-  return real.length > 0 ? real : packages;
+  return (packages || []).filter((p) => !isSamplePackage(p));
 }
 
 export function filterRealStudents(students: Student[]): Student[] {
-  const real = students.filter((s) => !isSampleStudent(s));
-  return real.length > 0 ? real : students;
+  return (students || []).filter((s) => !isSampleStudent(s));
 }
 
 // In-memory cache for folder IDs
@@ -689,5 +686,58 @@ export async function loadStudentsFromDrive(accessToken: string): Promise<Studen
     console.warn('Failed to load students from Google Drive:', err);
   }
   return null;
+}
+
+/**
+ * Purges AI Studio sample files and noise from Google Drive backup folders
+ */
+export async function purgeDriveSampleFiles(accessToken: string): Promise<{ deletedCount: number }> {
+  let deletedCount = 0;
+  try {
+    const structure = await ensureDriveStructure(accessToken);
+    // Find all files in CBT Web App backup folders
+    const parentIds = [
+      structure.rootFolderId,
+      structure.dataSoalFolderId,
+      structure.paketUjianFolderId,
+      structure.dataSiswaFolderId,
+      structure.dataNilaiFolderId,
+    ];
+
+    for (const pId of parentIds) {
+      try {
+        const q = `'${pId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (res.ok) {
+          const json = await res.json();
+          const files = json.files || [];
+          for (const f of files) {
+            const isSample =
+              f.name.includes('MAT101') ||
+              f.name.includes('IPA202') ||
+              f.name.includes('pkg-pancasila-1') ||
+              f.name.toLowerCase().includes('sample') ||
+              f.name.toLowerCase().includes('dummy');
+
+            if (isSample) {
+              await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${accessToken}` },
+              }).catch(() => {});
+              deletedCount++;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`Error scanning parent ${pId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to purge Google Drive sample files:', err);
+  }
+  return { deletedCount };
 }
 

@@ -4,7 +4,7 @@ import { Exam } from '../types';
  * Encodes an Exam into a URL-safe Base64 string.
  * Uses TextEncoder to safely support Indonesian characters, mathematical symbols, superscripts, etc.
  */
-export function encodeExamPayload(exam: Exam): string {
+export function encodeExamPayload(exam: Exam, schoolName?: string): string {
   try {
     const compact = {
       id: exam.id,
@@ -15,6 +15,7 @@ export function encodeExamPayload(exam: Exam): string {
       tp: exam.examType,
       k: exam.token,
       d: exam.durationMinutes,
+      sch: schoolName || '',
       q: (exam.questions || []).map((q) => ({
         id: q.id,
         n: q.number,
@@ -47,7 +48,7 @@ export function encodeExamPayload(exam: Exam): string {
 /**
  * Decodes a URL-safe Base64 string back into a full Exam object.
  */
-export function decodeExamPayload(encoded: string): Exam | null {
+export function decodeExamPayload(encoded: string): (Exam & { schoolName?: string }) | null {
   try {
     const binary = atob(encoded);
     const bytes = new Uint8Array(binary.length);
@@ -69,6 +70,7 @@ export function decodeExamPayload(encoded: string): Exam | null {
       durationMinutes: compact.d || 30,
       isActive: true,
       createdAt: new Date().toISOString(),
+      schoolName: compact.sch || undefined,
       questions: compact.q.map((q: any, idx: number) => ({
         id: q.id || `q-${idx + 1}`,
         number: q.n !== undefined ? q.n : idx + 1,
@@ -92,9 +94,9 @@ export function decodeExamPayload(encoded: string): Exam | null {
 
 /**
  * Builds the complete shareable student link with embedded exam data
- * and optional Google Drive file ID.
+ * and optional Google Drive file ID and School Name.
  */
-export function buildStudentExamUrl(exam: Exam, driveFileId?: string): string {
+export function buildStudentExamUrl(exam: Exam, driveFileId?: string, schoolName?: string): string {
   try {
     const origin = window.location.origin;
     const pathname = window.location.pathname;
@@ -107,7 +109,7 @@ export function buildStudentExamUrl(exam: Exam, driveFileId?: string): string {
     if (driveFileId) {
       url.searchParams.set('driveId', driveFileId);
     }
-    const payload = encodeExamPayload(exam);
+    const payload = encodeExamPayload(exam, schoolName);
     if (payload) {
       url.searchParams.set('p', payload);
     }

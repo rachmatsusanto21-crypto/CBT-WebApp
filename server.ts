@@ -36,35 +36,53 @@ function initStore() {
     if (fs.existsSync(STORE_FILE)) {
       const raw = fs.readFileSync(STORE_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.exams) && parsed.exams.length > 0) {
-        exams = parsed.exams;
-        userHasCreatedData = true;
+      if (Array.isArray(parsed.exams)) {
+        // Strip any legacy AI studio sample exams
+        exams = parsed.exams.filter(
+          (e: Exam) =>
+            e &&
+            e.id !== 'exam-1' &&
+            e.id !== 'exam-2' &&
+            e.code !== 'MAT101' &&
+            e.code !== 'IPA202' &&
+            !e.title?.includes('Aljabar & SPLDV') &&
+            !e.title?.includes('Ekosistem & Hukum Newton')
+        );
+        userHasCreatedData = exams.length > 0;
       }
-      if (Array.isArray(parsed.students) && parsed.students.length > 0) {
-        students = parsed.students;
+      if (Array.isArray(parsed.students)) {
+        // Strip legacy dummy students
+        students = parsed.students.filter(
+          (s: Student) => s && !(/^std-(10|[1-9])$/.test(s.id)) && s.name !== 'Ahmad Dahlan' && s.name !== 'Ahmad Fauzi Pratama'
+        );
       }
       if (parsed.schoolSettings) {
-        schoolSettings = parsed.schoolSettings;
+        if (parsed.schoolSettings.namaSekolah === 'SMA NEGERI 1 TELADAN JAKARTA') {
+          schoolSettings = { ...initialSchoolSettings };
+        } else {
+          schoolSettings = parsed.schoolSettings;
+        }
       }
-      if (Array.isArray(parsed.savedPackages) && parsed.savedPackages.length > 0) {
-        savedPackages = parsed.savedPackages;
-        userHasCreatedData = true;
+      if (Array.isArray(parsed.savedPackages)) {
+        // Strip legacy sample packages
+        savedPackages = parsed.savedPackages.filter(
+          (p: SavedQuestionPackage) =>
+            p &&
+            p.id !== 'pkg-pancasila-1' &&
+            p.id !== 'pkg-ipas-1' &&
+            p.id !== 'pkg-jawa-1' &&
+            p.id !== 'pkg-seni-1' &&
+            p.id !== 'pkg-p5-1'
+        );
+        if (savedPackages.length > 0) userHasCreatedData = true;
       }
       if (Array.isArray(parsed.results)) {
         examResults = parsed.results;
       }
-      console.log(`[Store] Berhasil memuat ${exams.length} naskah ujian & ${savedPackages.length} riwayat soal dari disk.`);
+      console.log(`[Store] Database bersih: ${exams.length} naskah ujian asli & ${savedPackages.length} riwayat soal asli dimuat.`);
     }
   } catch (err) {
     console.error("[Store] Gagal membaca persistent store:", err);
-  }
-
-  // Only fallback to initial samples if absolutely nothing exists on disk or from user
-  if (exams.length === 0 && !userHasCreatedData) {
-    exams = [...initialExams];
-  }
-  if (savedPackages.length === 0 && !userHasCreatedData) {
-    savedPackages = [...initialSavedPackages];
   }
 }
 
@@ -529,26 +547,67 @@ app.delete("/api/exams/:id", (req, res) => {
 });
 
 // Real-time monitoring ping
+// Real-time monitoring ping from student gadgets
 app.post("/api/monitoring/ping", (req, res) => {
   try {
-    const { studentName, examCode, progress, answeredCount, totalQuestions, status } = req.body;
+    const {
+      studentName,
+      examCode,
+      className,
+      deviceInfo,
+      currentQuestion,
+      progress,
+      answeredCount,
+      totalQuestions,
+      status,
+      score,
+    } = req.body;
+
+    if (!studentName || !examCode) {
+      return res.status(400).json({ error: "Nama siswa dan kode ujian wajib diisi" });
+    }
+
     const key = `${studentName}_${examCode}`;
     const existing = monitoringList.get(key);
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("id-ID");
 
     const updated: MonitoringStudent = {
       studentName,
       examCode,
-      progress: typeof progress === "number" ? Math.min(100, Math.max(0, Math.round(progress))) : 0,
-      answeredCount: answeredCount || 0,
-      totalQuestions: totalQuestions || 0,
-      status: status || (existing?.status === "Terdiskualifikasi" ? "Terdiskualifikasi" : "Mengerjakan"),
+      className: className || existing?.className || "-",
+      deviceInfo: deviceInfo || existing?.deviceInfo || "Gadget Siswa",
+      currentQuestion: typeof currentQuestion === "number" ? currentQuestion : existing?.currentQuestion || 1,
+      progress: typeof progress === "number" ? Math.min(100, Math.max(0, Math.round(progress))) : existing?.progress || 0,
+      answeredCount: typeof answeredCount === "number" ? answeredCount : existing?.answeredCount || 0,
+      totalQuestions: typeof totalQuestions === "number" ? totalQuestions : existing?.totalQuestions || 0,
+      status: status || (existing?.status === "Terdiskualifikasi" ? "Terdiskualifikasi" : existing?.status === "Selesai" ? "Selesai" : "Mengerjakan"),
       tabSwitches: existing ? existing.tabSwitches : 0,
-      lastPing: new Date().toLocaleTimeString("id-ID"),
+      lastPing: timeStr,
+      lastPingTimestamp: Date.now(),
+      isOnline: true,
+      score: typeof score === "number" ? score : existing?.score,
+      activeWarning: existing?.activeWarning || null,
+      pendingCommand: existing?.pendingCommand || null,
       violationsLog: existing ? existing.violationsLog : [],
     };
 
     monitoringList.set(key, updated);
-    res.json({ success: true });
+
+    // Retrieve pending command for the student gadget (e.g. warning alert from teacher)
+    const commandToSend = existing?.pendingCommand || null;
+    const warningMessage = existing?.activeWarning || null;
+    if (existing && existing.pendingCommand) {
+      existing.pendingCommand = null; // consume command
+    }
+
+    res.json({
+      success: true,
+      command: commandToSend,
+      warningMessage,
+      status: updated.status,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -557,7 +616,7 @@ app.post("/api/monitoring/ping", (req, res) => {
 // Anti-Cheat: Record violation
 app.post("/api/monitoring/violation", (req, res) => {
   try {
-    const { studentName, examCode, violationType, detail } = req.body;
+    const { studentName, examCode, violationType, detail, className, deviceInfo } = req.body;
     const key = `${studentName}_${examCode}`;
     let student = monitoringList.get(key);
 
@@ -575,17 +634,24 @@ app.post("/api/monitoring/violation", (req, res) => {
       student.tabSwitches += 1;
       student.status = "Terdeteksi Keluar Tab";
       student.lastPing = timeStr;
+      student.lastPingTimestamp = Date.now();
+      student.isOnline = true;
       student.violationsLog.unshift(violation);
     } else {
       student = {
         studentName,
         examCode,
+        className: className || "-",
+        deviceInfo: deviceInfo || "Gadget Siswa",
+        currentQuestion: 1,
         progress: 0,
         answeredCount: 0,
         totalQuestions: 0,
         status: "Terdeteksi Keluar Tab",
         tabSwitches: 1,
         lastPing: timeStr,
+        lastPingTimestamp: Date.now(),
+        isOnline: true,
         violationsLog: [violation],
       };
       monitoringList.set(key, student);
@@ -597,7 +663,44 @@ app.post("/api/monitoring/violation", (req, res) => {
   }
 });
 
-// Admin reset or clear monitoring
+// Teacher Action: Send warning alert directly to student's gadget
+app.post("/api/monitoring/warn", (req, res) => {
+  try {
+    const { studentName, examCode, message } = req.body;
+    const key = `${studentName}_${examCode}`;
+    const student = monitoringList.get(key);
+    if (student) {
+      student.activeWarning = message || "Peringatan Pengawas: Harap fokus pada layar ujian dan jangan beralih aplikasi/tab!";
+      student.pendingCommand = "show_warning";
+      res.json({ success: true, student });
+    } else {
+      res.status(404).json({ error: "Siswa tidak ditemukan dalam daftar monitoring" });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Teacher Action: Disqualify student
+app.post("/api/monitoring/disqualify", (req, res) => {
+  try {
+    const { studentName, examCode } = req.body;
+    const key = `${studentName}_${examCode}`;
+    const student = monitoringList.get(key);
+    if (student) {
+      student.status = "Terdiskualifikasi";
+      student.pendingCommand = "force_submit";
+      student.activeWarning = "Ujian Anda telah dihentikan oleh pengawas karena pelanggaran berulang.";
+      res.json({ success: true, student });
+    } else {
+      res.status(404).json({ error: "Siswa tidak ditemukan dalam daftar monitoring" });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Teacher Action: Reset violation status
 app.post("/api/monitoring/reset", (req, res) => {
   try {
     const { studentName, examCode } = req.body;
@@ -605,6 +708,7 @@ app.post("/api/monitoring/reset", (req, res) => {
     const student = monitoringList.get(key);
     if (student) {
       student.status = "Mengerjakan";
+      student.activeWarning = null;
       res.json({ success: true, student });
     } else {
       res.status(404).json({ error: "Siswa tidak ditemukan dalam monitoring" });
@@ -614,12 +718,98 @@ app.post("/api/monitoring/reset", (req, res) => {
   }
 });
 
-// Get active monitoring
+// Clear all or single entry from monitoring
+app.post("/api/monitoring/clear", (req, res) => {
+  try {
+    const { studentName, examCode } = req.body || {};
+    if (studentName && examCode) {
+      const key = `${studentName}_${examCode}`;
+      monitoringList.delete(key);
+    } else {
+      monitoringList.clear();
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get active monitoring with real-time online status calculation
 app.get("/api/monitoring", (req, res) => {
+  const now = Date.now();
+  const studentsList = Array.from(monitoringList.values()).map((s) => {
+    // If no ping received within 15 seconds, mark offline
+    const isOnline = s.lastPingTimestamp ? now - s.lastPingTimestamp < 15000 : false;
+    return {
+      ...s,
+      isOnline,
+    };
+  });
+
   res.json({
-    students: Array.from(monitoringList.values()),
+    students: studentsList,
+    totalOnline: studentsList.filter((s) => s.isOnline && s.status !== "Selesai").length,
     timestamp: new Date().toISOString(),
   });
+});
+
+// Clean AI Studio Noise (Soal Demo, Siswa Dummy, dsb)
+app.post(["/api/clean-ai-noise", "/api/purge-sample-data"], (req, res) => {
+  try {
+    const beforeExams = exams.length;
+    exams = exams.filter(
+      (e) =>
+        e &&
+        e.id !== 'exam-1' &&
+        e.id !== 'exam-2' &&
+        e.code !== 'MAT101' &&
+        e.code !== 'IPA202' &&
+        !e.title?.includes('Aljabar & SPLDV') &&
+        !e.title?.includes('Ekosistem & Hukum Newton')
+    );
+    const removedExams = beforeExams - exams.length;
+
+    const beforePackages = savedPackages.length;
+    savedPackages = savedPackages.filter(
+      (p) =>
+        p &&
+        p.id !== 'pkg-pancasila-1' &&
+        p.id !== 'pkg-ipas-1' &&
+        p.id !== 'pkg-jawa-1' &&
+        p.id !== 'pkg-seni-1' &&
+        p.id !== 'pkg-p5-1'
+    );
+    const removedPackages = beforePackages - savedPackages.length;
+
+    const beforeStudents = students.length;
+    students = students.filter(
+      (s) => s && !(/^std-(10|[1-9])$/.test(s.id)) && s.name !== 'Ahmad Dahlan' && s.name !== 'Ahmad Fauzi Pratama'
+    );
+    const removedStudents = beforeStudents - students.length;
+
+    if (schoolSettings.namaSekolah === 'SMA NEGERI 1 TELADAN JAKARTA') {
+      schoolSettings = { ...initialSchoolSettings };
+    }
+
+    monitoringList.clear();
+
+    userHasCreatedData = exams.length > 0 || savedPackages.length > 0 || students.length > 0;
+    persistStore();
+
+    res.json({
+      success: true,
+      message: 'Seluruh noise AI Studio (soal contoh, paket demo, siswa dummy) telah dibersihkan!',
+      removedExams,
+      removedPackages,
+      removedStudents,
+      remainingExams: exams.length,
+      remainingPackages: savedPackages.length,
+      remainingStudents: students.length,
+      schoolSettings,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Submit Exam & Remedial Recommendation (Gemini AI)

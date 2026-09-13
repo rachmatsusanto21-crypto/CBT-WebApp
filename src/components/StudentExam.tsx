@@ -15,7 +15,8 @@ import {
   ArrowRight,
   RotateCcw,
   Printer,
-  Maximize2
+  Maximize2,
+  BellRing
 } from 'lucide-react';
 import { Student, Exam, ExamResult, Question, SchoolSettings } from '../types';
 import { Letterhead } from './Letterhead';
@@ -164,6 +165,8 @@ export const StudentExam: React.FC<StudentExamProps> = ({
   const [violationCount, setViolationCount] = useState<number>(0);
   const [showViolationModal, setShowViolationModal] = useState<boolean>(false);
   const [lastViolationTime, setLastViolationTime] = useState<string>('');
+  const [teacherDirectWarning, setTeacherDirectWarning] = useState<string | null>(null);
+  const [isDisqualified, setIsDisqualified] = useState<boolean>(false);
 
   // Result State
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
@@ -255,7 +258,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     };
   }, [activeExam, activeStudent, examResult, onViolationOccurred]);
 
-  // Periodic Progress Ping to Backend (every 20s)
+  // Periodic Progress Ping to Backend (every 5s for responsive proctoring)
   useEffect(() => {
     if (!activeExam || !activeStudent || examResult) return;
 
@@ -267,21 +270,39 @@ export const StudentExam: React.FC<StudentExamProps> = ({
 
       const total = exam.questions.length;
       const answered = Object.keys(currentAnswers).length;
-      const progress = total > 0 ? (answered / total) * 100 : 0;
+      const progress = total > 0 ? Math.round((answered / total) * 100) : 0;
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      const deviceInfo = isMobile ? 'Smartphone' : 'Laptop / PC';
 
       try {
-        await safeFetchJson('/api/monitoring/ping', {
+        const { ok, data } = await safeFetchJson('/api/monitoring/ping', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             studentName: student.name,
             examCode: exam.code,
+            className: student.class,
+            deviceInfo,
+            currentQuestion: currentIndex + 1,
             progress,
             answeredCount: answered,
             totalQuestions: total,
-            status: 'Mengerjakan',
+            status: isDisqualified ? 'Terdiskualifikasi' : 'Mengerjakan',
           }),
         });
+
+        if (ok && data) {
+          if (data.warningMessage) {
+            setTeacherDirectWarning(data.warningMessage);
+          }
+          if (data.status === 'Terdiskualifikasi' || data.command === 'force_submit') {
+            setIsDisqualified(true);
+            setTeacherDirectWarning('Ujian Anda telah dihentikan/didiskualifikasi oleh pengawas.');
+            setShowSubmitModal(false);
+            // Trigger submit
+            handleSubmitExam();
+          }
+        }
       } catch (err) {
         console.error('Ping error:', err);
       }
@@ -290,9 +311,9 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     // Initial ping
     pingProgress();
 
-    const interval = setInterval(pingProgress, 20000);
+    const interval = setInterval(pingProgress, 5000);
     return () => clearInterval(interval);
-  }, [activeExam, activeStudent, examResult]);
+  }, [activeExam, activeStudent, examResult, currentIndex, isDisqualified]);
 
   // Countdown Timer
   useEffect(() => {
@@ -743,6 +764,30 @@ export const StudentExam: React.FC<StudentExamProps> = ({
 
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col select-none">
+        {/* Direct Warning from Teacher Modal */}
+        {teacherDirectWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+            <div className="bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl">
+              <div className="w-16 h-16 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/50 animate-pulse">
+                <BellRing className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-black text-amber-400">PERINGATAN PENGAWAS UJIAN</h2>
+              <div className="bg-amber-950/60 border border-amber-800 rounded-2xl p-4 my-4 text-xs sm:text-sm text-amber-200 text-left font-medium leading-relaxed">
+                {teacherDirectWarning}
+              </div>
+              <p className="text-[11px] text-slate-400 mb-5">
+                Pengawas memantau aktivitas layar dan gawai Anda secara langsung dari server.
+              </p>
+              <button
+                onClick={() => setTeacherDirectWarning(null)}
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl shadow-lg transition-all text-xs"
+              >
+                Saya Mengerti & Akan Fokus Mengerjakan
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Anti-Cheat Violation Warning Modal */}
         {showViolationModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
