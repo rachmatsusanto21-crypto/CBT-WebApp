@@ -36,7 +36,20 @@ let cachedAccessToken: string | null = (() => {
   } catch {}
   return null;
 })();
-let currentUser: User | null = null;
+let currentUser: User | any = (() => {
+  try {
+    const stored = localStorage.getItem('cbt_gdrive_access_token');
+    const email = localStorage.getItem('cbt_gdrive_user_email');
+    if (stored) {
+      return {
+        uid: 'gdrive-authenticated-user',
+        displayName: 'Akun Google Terhubung',
+        email: email || 'rachmatsusanto21@guru.sd.belajar.id',
+      };
+    }
+  } catch {}
+  return null;
+})();
 
 // Subscribers for auth state changes
 type AuthListener = (user: User | null, token: string | null) => void;
@@ -69,8 +82,8 @@ export const initAuth = (
   onAuthFailure?: () => void
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
-    currentUser = user;
     if (user) {
+      currentUser = user;
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
@@ -79,6 +92,16 @@ export const initAuth = (
         if (onAuthFailure) onAuthFailure();
       }
     } else {
+      // If user is authenticated via GSI or manual access token, don't wipe it
+      if (
+        currentUser?.uid === 'manual-token-user' ||
+        currentUser?.uid === 'gdrive-authenticated-user' ||
+        cachedAccessToken
+      ) {
+        // Preserve external or cached token session
+        return;
+      }
+      currentUser = null;
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }

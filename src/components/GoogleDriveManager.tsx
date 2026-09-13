@@ -714,20 +714,51 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
             {/* Step 1: Copy domain */}
             <div className="bg-white rounded-xl border border-amber-200 p-3.5 space-y-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                1. Domain yang harus didaftarkan:
+                1. Domain yang harus didaftarkan di Firebase:
               </div>
-              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                <code className="text-xs font-mono text-slate-800 flex-1 break-all select-all font-semibold">
-                  {unauthorizedDomainInfo.domain}
-                </code>
-                <button
-                  type="button"
-                  onClick={handleCopyDomain}
-                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md flex items-center space-x-1 transition-colors flex-shrink-0"
-                >
-                  {copiedDomain ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedDomain ? 'Tersalin!' : 'Salin Domain'}</span>
-                </button>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] text-slate-500 font-semibold block">Domain Aplikasi Saat Ini:</span>
+                    <code className="text-xs font-mono text-slate-800 break-all select-all font-semibold">
+                      {unauthorizedDomainInfo.domain}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyDomain}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md flex items-center space-x-1 transition-colors flex-shrink-0"
+                  >
+                    {copiedDomain ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedDomain ? 'Tersalin!' : 'Salin'}</span>
+                  </button>
+                </div>
+
+                {unauthorizedDomainInfo.domain.includes('ais-dev-') && (
+                  <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] text-slate-500 font-semibold block">Domain Tautan Bersama (Pre):</span>
+                      <code className="text-xs font-mono text-slate-800 break-all select-all font-semibold">
+                        {unauthorizedDomainInfo.domain.replace('ais-dev-', 'ais-pre-')}
+                      </code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const preDomain = unauthorizedDomainInfo.domain.replace('ais-dev-', 'ais-pre-');
+                        if (navigator.clipboard) {
+                          navigator.clipboard.writeText(preDomain);
+                          setCopiedDomain(true);
+                          setTimeout(() => setCopiedDomain(false), 3000);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-md flex items-center space-x-1 transition-colors flex-shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Salin Pre</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -742,7 +773,7 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
                 <li>Klik <strong>Add domain</strong> (Tambahkan domain), lalu tempel domain yang sudah disalin di atas.</li>
                 <li>Klik <strong>Save</strong> (Simpan), lalu kembali ke sini dan klik <strong>Hubungkan Google Drive</strong>.</li>
               </ol>
-              <div className="pt-1">
+              <div className="pt-1 flex flex-wrap items-center gap-2">
                 <a
                   href={unauthorizedDomainInfo.settingsUrl}
                   target="_blank"
@@ -751,6 +782,16 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
                 >
                   <span>Buka Firebase Console Settings</span>
                   <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <a
+                  href={typeof window !== 'undefined' ? window.location.href : '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors border border-slate-300"
+                  title="Membuka aplikasi langsung di tab browser mandiri tanpa iFrame"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Buka di Tab Baru</span>
                 </a>
               </div>
             </div>
