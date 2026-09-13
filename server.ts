@@ -487,6 +487,23 @@ app.get("/api/exams", (req, res) => {
   res.json({ success: true, count: exams.length, exams });
 });
 
+// Get single exam by code or id (used by direct student links)
+app.get("/api/exams/by-code/:code", (req, res) => {
+  try {
+    const rawCode = (req.params.code || "").trim();
+    const searchCode = rawCode.toUpperCase();
+    const exam = exams.find(
+      (e) => (e.code && e.code.trim().toUpperCase() === searchCode) || e.id === rawCode
+    );
+    if (!exam) {
+      return res.status(404).json({ error: `Paket ujian dengan kode "${rawCode}" tidak ditemukan di server` });
+    }
+    res.json({ success: true, exam });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Create exam
 app.post("/api/exams", (req, res) => {
   try {

@@ -1473,6 +1473,34 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               </div>
             </div>
 
+            {/* Tautan Singkat Pengerjaan Siswa */}
+            <div className="bg-purple-50/70 border border-purple-200 rounded-2xl p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-purple-900 flex items-center space-x-1.5">
+                  <Share2 className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Link Ujian Siswa (Ringkas & Aman)</span>
+                </span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-semibold">
+                  Bebas Error URL
+                </span>
+              </div>
+              <div className="bg-white border border-purple-200 rounded-xl p-2 font-mono text-[11px] text-slate-700 break-all select-all flex items-center justify-between gap-2">
+                <span className="truncate">
+                  {buildStudentExamUrl(selectingExam)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyStudentLink(selectingExam)}
+                  className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[11px] font-bold flex-shrink-0 transition-colors"
+                >
+                  {copiedStudentLink === selectingExam.id ? 'Disalin!' : 'Salin'}
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                Tautan ringkas otomatis mengisi mode siswa, kode soal, dan token. Aman dibagikan via WhatsApp & Google Classroom tanpa batasan panjang URL.
+              </p>
+            </div>
+
             <div className="space-y-2 pt-1">
               {/* Tombol Salin Link Ujian Siswa */}
               <button

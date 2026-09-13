@@ -93,8 +93,9 @@ export function decodeExamPayload(encoded: string): (Exam & { schoolName?: strin
 }
 
 /**
- * Builds the complete shareable student link with embedded exam data
- * and optional Google Drive file ID and School Name.
+ * Builds the complete shareable student link with exam code, token, and optional Google Drive file ID.
+ * NOTE: Does NOT attach the massive questions payload (?p=...) to avoid "414 Request-URI Too Long" / "URL too long" errors.
+ * Student devices automatically load the exam via clean URL query parameter and backend API.
  */
 export function buildStudentExamUrl(exam: Exam, driveFileId?: string, schoolName?: string): string {
   try {
@@ -109,12 +110,8 @@ export function buildStudentExamUrl(exam: Exam, driveFileId?: string, schoolName
     if (driveFileId) {
       url.searchParams.set('driveId', driveFileId);
     }
-    const payload = encodeExamPayload(exam, schoolName);
-    if (payload) {
-      url.searchParams.set('p', payload);
-    }
     return url.toString();
   } catch {
-    return `${window.location.origin}/?mode=siswa&examCode=${encodeURIComponent(exam.code)}`;
+    return `${window.location.origin}/?mode=siswa&examCode=${encodeURIComponent(exam.code)}${exam.token ? `&token=${encodeURIComponent(exam.token)}` : ''}`;
   }
 }

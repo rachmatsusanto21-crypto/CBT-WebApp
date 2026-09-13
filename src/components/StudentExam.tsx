@@ -101,10 +101,11 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           .catch(() => {});
       }
 
-      // 3. Search by codeParam in provided exams
+      // 3. Search by codeParam in provided exams or backend
       if (codeParam) {
+        const cleanCode = codeParam.trim().toUpperCase();
         const matching = exams.find(
-          (e) => e.code.toUpperCase() === codeParam.toUpperCase() || e.id === codeParam
+          (e) => (e.code && e.code.trim().toUpperCase() === cleanCode) || e.id === codeParam
         );
         if (matching) {
           setSelectedExamId(matching.id);
@@ -119,7 +120,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           if (cachedStr) {
             const cachedList: Exam[] = JSON.parse(cachedStr);
             const foundCached = cachedList.find(
-              (e) => e.code.toUpperCase() === codeParam.toUpperCase() || e.id === codeParam
+              (e) => (e.code && e.code.trim().toUpperCase() === cleanCode) || e.id === codeParam
             );
             if (foundCached) {
               if (onExamLoaded) onExamLoaded(foundCached);
@@ -131,10 +132,25 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           }
         } catch {}
 
-        // If codeParam was specified but not found, DO NOT fall back to AI Studio exam!
-        setLoginError(
-          `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan tautan pengerjaan sudah lengkap atau hubungi guru pengawas.`
-        );
+        // Asynchronous lookup from backend server /api/exams/by-code/:code
+        safeFetchJson(`/api/exams/by-code/${encodeURIComponent(codeParam)}`)
+          .then(({ ok, data }) => {
+            if (ok && data?.exam) {
+              if (onExamLoaded) onExamLoaded(data.exam);
+              setSelectedExamId(data.exam.id);
+              setInputToken(tokenParam || data.exam.token);
+              setLoginError('');
+            } else {
+              setLoginError(
+                `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan kode soal sudah benar atau hubungi guru pengawas.`
+              );
+            }
+          })
+          .catch(() => {
+            setLoginError(
+              `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan tautan pengerjaan sudah lengkap atau hubungi guru pengawas.`
+            );
+          });
         return;
       }
 
