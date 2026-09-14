@@ -29,6 +29,7 @@ import { CLASS_ROSTER_OPTIONS } from '../initialData';
 import { safeFetchJson } from '../utils/apiHelper';
 import { getAccessToken, getCachedAccessToken, googleSignIn } from '../services/firebaseAuth';
 import { saveStudentsToDrive, loadStudentsFromDrive } from '../services/googleDriveService';
+import { syncStudentsToFirestore } from '../services/firestoreSyncService';
 
 interface StudentManagerProps {
   students: Student[];
@@ -103,27 +104,36 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
 
-  // Sync students directly to Google Drive subfolder "Data Siswa"
+  // Sync students directly to Firebase Firestore & Google Drive
   const handleSyncStudentsToDrive = async () => {
     setIsDriveSyncing(true);
     setFeedback(null);
     try {
+      // 1. Sync to Firebase Firestore
+      await syncStudentsToFirestore(students);
+
+      // 2. Sync to Google Drive
+      let driveNote = '';
       let token = await getAccessToken();
       if (!token) {
-        const res = await googleSignIn();
-        if (res) token = res.accessToken;
-        else {
-          setIsDriveSyncing(false);
-          return;
+        try {
+          const res = await googleSignIn();
+          if (res) token = res.accessToken;
+        } catch {
+          driveNote = ' (Google Drive dapat dihubungkan di menu Google Drive)';
         }
       }
-      await saveStudentsToDrive(students, token);
+      if (token) {
+        await saveStudentsToDrive(students, token);
+        driveNote = ' & Google Drive folder "Data Siswa"';
+      }
+
       setFeedback({
         type: 'success',
-        text: `Berhasil menyimpan data ${students.length} siswa ke Google Drive folder "Data Siswa"! Akses Reader publik aktif.`,
+        text: `Berhasil menyimpan data ${students.length} siswa ke Firebase Firestore${driveNote}!`,
       });
     } catch (err: any) {
-      setFeedback({ type: 'error', text: err.message || 'Gagal menyimpan data siswa ke Google Drive.' });
+      setFeedback({ type: 'error', text: err.message || 'Gagal menyimpan data siswa ke Firebase / Google Drive.' });
     } finally {
       setIsDriveSyncing(false);
     }
@@ -535,10 +545,10 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
             onClick={handleSyncStudentsToDrive}
             disabled={isDriveSyncing || students.length === 0}
             className="flex items-center space-x-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-all border border-blue-200 shadow-sm disabled:opacity-50"
-            title="Simpan data siswa ke Google Drive folder 'CBT Web App - Backup / Data Siswa'"
+            title="Simpan data siswa ke Firebase Firestore dan Google Drive folder 'CBT Web App - Backup / Data Siswa'"
           >
             <Cloud className="w-4 h-4" />
-            <span>{isDriveSyncing ? 'Menyimpan...' : 'Simpan ke GDrive'}</span>
+            <span>{isDriveSyncing ? 'Menyimpan...' : 'Unggah ke Cloud (Firebase & GDrive)'}</span>
           </button>
 
           <button

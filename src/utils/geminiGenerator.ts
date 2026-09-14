@@ -72,7 +72,7 @@ export function clearStoredGeminiApiKey(): void {
 
 /**
  * Verify if Gemini API is active, working, and valid.
- * Checks both server-side backend (if available) and client-side fallback (for Vercel static deployments).
+ * Checks both server-side backend (if available) and client-side fallback (for Firebase static deployments).
  */
 export async function verifyGeminiApiKey(customApiKeyToTest?: string): Promise<ApiVerificationResult> {
   const activeCustomKey = customApiKeyToTest !== undefined ? customApiKeyToTest.trim() : getStoredGeminiApiKey();
@@ -116,12 +116,12 @@ export async function verifyGeminiApiKey(customApiKeyToTest?: string): Promise<A
     console.warn('Backend status check failed, falling back to direct client ping:', err);
   }
 
-  // 2. If backend returned 404 (e.g. Vercel static deployment) or server is unreachable, test directly on client
+  // 2. If backend returned 404 (e.g. Firebase static deployment) or server is unreachable, test directly on client
   if (!activeCustomKey) {
     return {
       active: false,
       source: 'none',
-      message: 'Kunci Gemini API belum diatur. Masukkan kunci API Anda untuk mengaktifkan AI di Vercel.',
+      message: 'Kunci Gemini API belum diatur. Masukkan kunci API Anda untuk mengaktifkan AI di browser.',
       hasServerKey: false,
     };
   }
@@ -182,7 +182,7 @@ export async function verifyGeminiApiKey(customApiKeyToTest?: string): Promise<A
 
 /**
  * Client-Side Gemini Generator Fallback.
- * Used when backend server returns 404 (e.g. on Vercel static hosting)
+ * Used when backend server returns 404 (e.g. on Firebase static hosting)
  * or when direct client generation is requested.
  */
 async function generateQuestionsClientSide(
@@ -367,7 +367,7 @@ Format Output: HANYA JSON array sesuai responseSchema tanpa format markdown bloc
 /**
  * Universal Question Generation Function with Auto-Fallback.
  * 1. Tries Backend API (/api/gemini/generate-questions) first, with custom API key if present.
- * 2. If Backend returns 404 (e.g. Vercel deployment where server.ts is not running) or network drops,
+ * 2. If Backend returns 404 (e.g. Firebase static deployment where server.ts is not running) or network drops,
  *    it automatically switches to Client-Side Generation using the stored key.
  * 3. If neither backend nor client key is available, provides an actionable, user-friendly error message.
  */
@@ -403,7 +403,7 @@ export async function generateExamQuestionsWithFallback(
     };
   }
 
-  // If server returned 404 (common on Vercel static deployments) OR connection failed
+  // If server returned 404 (common on Firebase static deployments) OR connection failed
   const is404 = serverResponse.status === 404;
   const isServerlessOrOffline = !serverResponse.ok && (is404 || serverResponse.status === 0 || serverResponse.status >= 500);
 
@@ -423,9 +423,9 @@ export async function generateExamQuestionsWithFallback(
         throw new Error(`Pembuatan soal via Client AI gagal: ${clientErr.message || clientErr}`);
       }
     } else {
-      // Missing API key in Vercel environment
+      // Missing API key in Firebase Hosting static environment
       throw new Error(
-        `Backend server tidak aktif di hosting Vercel Anda (Status 404) dan GEMINI_API_KEY belum dikonfigurasi. Silakan buka menu "Pengaturan & API Key" untuk memasukkan Gemini API Key gratis Anda agar fitur generate soal langsung aktif.`
+        `Backend server tidak terdeteksi di Firebase Hosting statis dan GEMINI_API_KEY belum dikonfigurasi di browser. Silakan buka menu "Pengaturan & API Key" untuk memasukkan Gemini API Key gratis Anda agar fitur generate soal langsung aktif.`
       );
     }
   }

@@ -111,7 +111,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onApiKeyUpdate
                 Pengaturan API & Kunci Gemini AI
               </h1>
               <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                Verifikasi kredensial Google Gemini AI, atur kunci API kustom, dan panduan mengatasi kendala deployment Vercel & GitHub.
+                Verifikasi kredensial Google Gemini AI, atur kunci API kustom, dan panduan deployment Firebase Hosting.
               </p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onApiKeyUpdate
             <span>Masukkan Gemini API Key Kustom</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Jika Anda mengekspor aplikasi ini ke GitHub dan men-deploy di Vercel atau Netlify, masukkan kunci API Anda di sini agar fitur generate soal dan analisis remedial dapat berfungsi secara mandiri tanpa error 404.
+            Jika Anda men-deploy aplikasi ini di Firebase Hosting, masukkan kunci API Anda di sini agar fitur generate soal dan analisis remedial dapat berfungsi mandiri langsung di browser.
           </p>
 
           <form onSubmit={handleSaveKey} className="mt-5 space-y-4">
@@ -310,68 +310,58 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onApiKeyUpdate
         </div>
       </div>
 
-      {/* Vercel & GitHub Deployment Diagnostics Guide */}
+      {/* Firebase Hosting & Firestore Guide */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-800">
         <div className="flex items-start space-x-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+          <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0 border border-orange-500/30">
             <HelpCircle className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              Panduan Mengatasi Error 404 Saat Deploy di Vercel & GitHub
+              Panduan Deployment Firebase Hosting & Firestore (Resmi Tanpa Vercel)
             </h3>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 leading-relaxed">
-              Mengapa di Google AI Studio preview berjalan lancar tanpa error, namun saat di-deploy ke Vercel muncul error 404?
+              Aplikasi telah resmi dialihkan ke Firebase Hosting (<strong className="text-orange-300">cbtwebapp-a5c83.web.app</strong>) dengan Firestore database dan Google Drive sync terpadu.
             </p>
           </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
-          {/* Box 1: Penyebab */}
+          {/* Box 1: Arsitektur Firebase */}
           <div className="bg-slate-800/80 rounded-xl p-4 border border-slate-700/60">
-            <h4 className="font-semibold text-amber-300 flex items-center space-x-2">
-              <span>1. Penyebab Teknis</span>
+            <h4 className="font-semibold text-orange-300 flex items-center space-x-2">
+              <span>1. Domain & Proyek Firebase</span>
             </h4>
             <p className="text-slate-300 mt-2 leading-relaxed text-xs">
-              Di Google AI Studio, container menjalankan server backend Express (<code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">server.ts</code>) pada port 3000. Saat di-push ke GitHub dan di-deploy ke Vercel dengan template standar Vite, Vercel hanya menyajikan file statis (<code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">dist/</code>) tanpa server backend aktif, sehingga pemanggilan ke <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">/api/gemini/generate-questions</code> menghasilkan respon <strong>404 Not Found</strong>.
+              Proyek Firebase terhubung: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-orange-300 font-mono">cbtwebapp-a5c83</code>.<br />
+              URL Publik untuk gawai siswa: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono">https://cbtwebapp-a5c83.web.app</code>.<br />
+              File konfigurasi <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">firebase.json</code> dan <code className="bg-slate-900 px-1 py-0.5 rounded text-blue-300">.firebaserc</code> telah diatur otomatis untuk mengarahkan seluruh rute ke bundle statis Vite.
             </p>
           </div>
 
-          {/* Box 2: Solusi Dual-Engine */}
+          {/* Box 2: Dual Engine AI */}
           <div className="bg-slate-800/80 rounded-xl p-4 border border-slate-700/60">
             <h4 className="font-semibold text-emerald-300 flex items-center space-x-2">
-              <span>2. Solusi Dual-Engine (Auto-Fallback)</span>
+              <span>2. Dual-Engine AI di Firebase Hosting</span>
             </h4>
             <p className="text-slate-300 mt-2 leading-relaxed text-xs">
-              Aplikasi ini telah diperbarui dengan fitur <strong>Dual-Engine Auto-Fallback</strong>:
-              Jika rute server Vercel merespon 404, aplikasi akan <strong>otomatis beralih menggunakan Client-Side Generator langsung di peramban</strong> menggunakan API Key yang Anda simpan di atas atau variabel <code className="bg-slate-900 px-1 py-0.5 rounded text-emerald-300">VITE_GEMINI_API_KEY</code> di Vercel.
+              Di Firebase Hosting statis, generator soal dan remedial AI otomatis beroperasi via <strong>Client-Side Engine</strong> langsung di peramban menggunakan Gemini API Key yang Anda simpan di atas atau variabel lingkungan build. Data siswa, soal, nilai, dan analisis tersinkronisasi aman ke Firestore & Google Drive.
             </p>
           </div>
         </div>
 
-        <div className="mt-4 p-4 rounded-xl bg-blue-950/40 border border-blue-800/40">
-          <h5 className="text-xs font-bold text-blue-300 uppercase tracking-wider">
-            2 Cara Mengaktifkan di Vercel:
+        <div className="mt-4 p-4 rounded-xl bg-orange-950/40 border border-orange-800/40">
+          <h5 className="text-xs font-bold text-orange-300 uppercase tracking-wider">
+            Perintah Build & Deploy ke Firebase Hosting:
           </h5>
-          <ul className="mt-2 space-y-2 text-xs text-slate-300 list-disc list-inside leading-relaxed">
-            <li>
-              <strong>Cara 1 (Instan, Tanpa Redeploy):</strong> Buka halaman aplikasi Anda yang sudah di-deploy di Vercel, masuk ke menu <strong>Mode Guru / Admin &rarr; Pengaturan & API Key</strong>, lalu tempelkan Gemini API Key Anda dan klik <strong>Simpan Kunci API</strong>.
-            </li>
-            <li>
-              <strong>Cara 2 (Permanen di Vercel Environment Variables):</strong> Buka Dashboard Vercel Proyek Anda &rarr; Masuk ke menu <strong>Settings</strong> &rarr; <strong>Environment Variables</strong> &rarr; Tambahkan:
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px]">
-                <div className="bg-slate-900 p-2 rounded border border-slate-700 text-blue-300">
-                  Key: <strong>GEMINI_API_KEY</strong><br />
-                  Value: <em>[Kunci API Anda]</em>
-                </div>
-                <div className="bg-slate-900 p-2 rounded border border-slate-700 text-emerald-300">
-                  Key: <strong>VITE_GEMINI_API_KEY</strong><br />
-                  Value: <em>[Kunci API Anda]</em>
-                </div>
-              </div>
-              Kemudian klik tombol <strong>Redeploy</strong> pada deployment terakhir Anda di Vercel.
-            </li>
-          </ul>
+          <div className="mt-2 space-y-2 text-xs text-slate-300 font-mono leading-relaxed">
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-emerald-400">
+              npm run deploy:firebase
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans">
+              Perintah di atas menjalankan build Vite ke folder <code className="text-orange-300">dist/</code> dan mempublikasikannya langsung ke Firebase Hosting beserta keamanan Firestore rules.
+            </p>
+          </div>
         </div>
       </div>
     </div>

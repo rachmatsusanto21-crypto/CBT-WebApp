@@ -14,6 +14,7 @@ export interface DriveFolderStructure {
   paketUjianFolderId: string;
   dataSiswaFolderId: string;
   dataNilaiFolderId: string;
+  analisisFolderId: string;
 }
 
 const ROOT_FOLDER_NAME = 'CBT Web App - Backup';
@@ -21,6 +22,7 @@ const SUBFOLDER_DATA_SOAL = 'Data Soal';
 const SUBFOLDER_PAKET_UJIAN = 'Paket Ujian Aktif';
 const SUBFOLDER_DATA_SISWA = 'Data Siswa';
 const SUBFOLDER_DATA_NILAI = 'Data Nilai';
+const SUBFOLDER_ANALISIS = 'Analisis Butir Soal';
 
 /**
  * Checks whether an exam is an initial AI Studio sample
@@ -179,11 +181,12 @@ export async function ensureDriveStructure(accessToken: string): Promise<DriveFo
   const rootFolderId = await findOrCreateFolder(ROOT_FOLDER_NAME, undefined, accessToken);
 
   // 2. Subfolders inside root
-  const [dataSoalFolderId, paketUjianFolderId, dataSiswaFolderId, dataNilaiFolderId] = await Promise.all([
+  const [dataSoalFolderId, paketUjianFolderId, dataSiswaFolderId, dataNilaiFolderId, analisisFolderId] = await Promise.all([
     findOrCreateFolder(SUBFOLDER_DATA_SOAL, rootFolderId, accessToken),
     findOrCreateFolder(SUBFOLDER_PAKET_UJIAN, rootFolderId, accessToken),
     findOrCreateFolder(SUBFOLDER_DATA_SISWA, rootFolderId, accessToken),
     findOrCreateFolder(SUBFOLDER_DATA_NILAI, rootFolderId, accessToken),
+    findOrCreateFolder(SUBFOLDER_ANALISIS, rootFolderId, accessToken),
   ]);
 
   cachedFolders = {
@@ -192,6 +195,7 @@ export async function ensureDriveStructure(accessToken: string): Promise<DriveFo
     paketUjianFolderId,
     dataSiswaFolderId,
     dataNilaiFolderId,
+    analisisFolderId,
   };
 
   return cachedFolders;
@@ -458,6 +462,74 @@ export async function saveResultsToDrive(
 ): Promise<DriveFileInfo> {
   const structure = await ensureDriveStructure(accessToken);
   return saveJsonToDrive('rekap_nilai_ujian.json', results, structure.dataNilaiFolderId, accessToken, true);
+}
+
+/**
+ * Saves item analysis & exam statistics into subfolder "Analisis Butir Soal"
+ */
+export async function saveAnalysisToDrive(
+  analysisData: any[],
+  accessToken: string
+): Promise<DriveFileInfo> {
+  const structure = await ensureDriveStructure(accessToken);
+  return saveJsonToDrive('analisis_butir_soal.json', analysisData, structure.analisisFolderId, accessToken, true);
+}
+
+/**
+ * Master sync to Google Drive: Uploads all 4 categories (Siswa, Soal, Nilai, Analisis)
+ */
+export async function saveAllCategoriesToDrive(
+  payload: {
+    students: Student[];
+    exams: Exam[];
+    savedPackages: SavedQuestionPackage[];
+    results: any[];
+    analysis: any[];
+    schoolSettings?: SchoolSettings;
+  },
+  accessToken: string,
+  onProgress?: (step: string, percent: number) => void
+): Promise<{
+  studentsFile: DriveFileInfo;
+  examsCount: number;
+  packagesCount: number;
+  resultsFile: DriveFileInfo;
+  analysisFile: DriveFileInfo;
+}> {
+  onProgress?.('Memeriksa struktur folder Google Drive...', 15);
+  const structure = await ensureDriveStructure(accessToken);
+
+  // 1. Data Siswa
+  onProgress?.('Mengunggah Data Siswa ke Google Drive...', 35);
+  const cleanStudents = filterRealStudents(payload.students);
+  const studentsFile = await saveJsonToDrive('data_siswa_master.json', cleanStudents, structure.dataSiswaFolderId, accessToken, true);
+
+  // 2. Data Soal & Paket Ujian
+  onProgress?.('Mengunggah Paket Ujian Aktif & Bank Soal ke Google Drive...', 60);
+  const cleanExams = filterRealExams(payload.exams);
+  const cleanPackages = filterRealPackages(payload.savedPackages);
+  await Promise.all([
+    saveActiveExamsToDrive(cleanExams, accessToken),
+    saveAllQuestionPackagesToDrive(cleanPackages, accessToken),
+  ]);
+
+  // 3. Data Nilai
+  onProgress?.('Mengunggah Rekap Nilai Siswa ke Google Drive...', 80);
+  const resultsFile = await saveJsonToDrive('rekap_nilai_siswa.json', payload.results, structure.dataNilaiFolderId, accessToken, true);
+
+  // 4. Analisis Butir Soal
+  onProgress?.('Mengunggah Analisis Butir Soal ke Google Drive...', 95);
+  const analysisFile = await saveJsonToDrive('analisis_butir_soal.json', payload.analysis, structure.analisisFolderId, accessToken, true);
+
+  onProgress?.('Sinkronisasi Google Drive selesai!', 100);
+
+  return {
+    studentsFile,
+    examsCount: cleanExams.length,
+    packagesCount: cleanPackages.length,
+    resultsFile,
+    analysisFile,
+  };
 }
 
 /**

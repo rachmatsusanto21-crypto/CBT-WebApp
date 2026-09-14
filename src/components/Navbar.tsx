@@ -188,12 +188,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setAdminTab('gdrive')}
               className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors font-medium ${
                 adminTab === 'gdrive'
-                  ? 'bg-slate-800 text-sky-400 border border-slate-700 font-semibold'
+                  ? 'bg-slate-800 text-orange-400 border border-slate-700 font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
-              <Cloud className="w-3.5 h-3.5 text-sky-400" />
-              <span>Google Drive & Cloud</span>
+              <Cloud className="w-3.5 h-3.5 text-orange-400" />
+              <span>Firebase & GDrive</span>
             </button>
 
             <button

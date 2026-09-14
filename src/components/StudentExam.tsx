@@ -22,6 +22,7 @@ import { Student, Exam, ExamResult, Question, SchoolSettings } from '../types';
 import { Letterhead } from './Letterhead';
 import { safeFetchJson } from '../utils/apiHelper';
 import { decodeExamPayload } from '../utils/examUrlEncoder';
+import { fetchExamFromFirestore } from '../services/firestoreExams';
 
 interface StudentExamProps {
   students: Student[];
@@ -66,13 +67,20 @@ export const StudentExam: React.FC<StudentExamProps> = ({
     }
 
     try {
-      const params = new URLSearchParams(window.location.search);
-      const codeParam = params.get('examCode') || params.get('code');
-      const tokenParam = params.get('token');
-      const payloadParam = params.get('p');
-      const driveIdParam = params.get('driveId');
+      // Support both search parameters (?mode=siswa&examCode=...) AND hash fragments (#mode=siswa&examCode=... or #p=...)
+      // Hash fragments are never sent to the HTTP server, making them 100% immune to HTTP 414 URI Too Long errors
+      const searchParams = new URLSearchParams(window.location.search);
+      let hashStr = window.location.hash || '';
+      if (hashStr.startsWith('#')) hashStr = hashStr.slice(1);
+      if (hashStr.startsWith('/')) hashStr = hashStr.slice(1);
+      const hashParams = new URLSearchParams(hashStr.includes('=') ? hashStr : '');
 
-      // 1. Direct encoded payload in URL (self-contained, works on Vercel & offline)
+      const codeParam = searchParams.get('examCode') || searchParams.get('code') || hashParams.get('examCode') || hashParams.get('code');
+      const tokenParam = searchParams.get('token') || hashParams.get('token');
+      const payloadParam = searchParams.get('p') || searchParams.get('payload') || hashParams.get('p') || hashParams.get('payload');
+      const driveIdParam = searchParams.get('driveId') || hashParams.get('driveId');
+
+      // 1. Direct encoded payload in URL (self-contained, works offline)
       if (payloadParam) {
         const decoded = decodeExamPayload(payloadParam);
         if (decoded) {
@@ -82,6 +90,18 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           setSelectedExamId(decoded.id);
           setInputToken(tokenParam || decoded.token);
           setLoginError('');
+
+          // Clean up oversized query parameters from address bar to prevent "URI too long" on refresh or resharing
+          try {
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('p');
+            cleanUrl.searchParams.delete('payload');
+            cleanUrl.searchParams.set('mode', 'siswa');
+            cleanUrl.searchParams.set('examCode', decoded.code);
+            if (decoded.token) cleanUrl.searchParams.set('token', decoded.token);
+            cleanUrl.hash = '';
+            window.history.replaceState({}, '', cleanUrl.toString());
+          } catch {}
           return;
         }
       }
@@ -101,7 +121,7 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           .catch(() => {});
       }
 
-      // 3. Search by codeParam in provided exams or backend
+      // 3. Search by codeParam in provided exams, backend, or Firestore
       if (codeParam) {
         const cleanCode = codeParam.trim().toUpperCase();
         const matching = exams.find(
@@ -132,21 +152,50 @@ export const StudentExam: React.FC<StudentExamProps> = ({
           }
         } catch {}
 
-        // Asynchronous lookup from backend server /api/exams/by-code/:code
+        // Asynchronous lookup: Backend server /api/exams/by-code/:code with Firestore fallback
         safeFetchJson(`/api/exams/by-code/${encodeURIComponent(codeParam)}`)
-          .then(({ ok, data }) => {
+          .then(async ({ ok, data }) => {
             if (ok && data?.exam) {
               if (onExamLoaded) onExamLoaded(data.exam);
               setSelectedExamId(data.exam.id);
               setInputToken(tokenParam || data.exam.token);
               setLoginError('');
-            } else {
-              setLoginError(
-                `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan kode soal sudah benar atau hubungi guru pengawas.`
-              );
+              return;
             }
+
+            // Fallback: Query Firestore database (accessible from any remote device/phone/laptop)
+            try {
+              const fsExam = await fetchExamFromFirestore(cleanCode);
+              if (fsExam) {
+                if (onExamLoaded) onExamLoaded(fsExam);
+                setSelectedExamId(fsExam.id);
+                setInputToken(tokenParam || fsExam.token);
+                setLoginError('');
+                return;
+              }
+            } catch (fsErr) {
+              console.warn('Firestore fallback lookup error:', fsErr);
+            }
+
+            setLoginError(
+              `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan kode soal sudah benar atau hubungi guru pengawas.`
+            );
           })
-          .catch(() => {
+          .catch(async () => {
+            // Fallback if backend server is unreachable on external devices
+            try {
+              const fsExam = await fetchExamFromFirestore(cleanCode);
+              if (fsExam) {
+                if (onExamLoaded) onExamLoaded(fsExam);
+                setSelectedExamId(fsExam.id);
+                setInputToken(tokenParam || fsExam.token);
+                setLoginError('');
+                return;
+              }
+            } catch (fsErr) {
+              console.warn('Firestore fallback lookup error:', fsErr);
+            }
+
             setLoginError(
               `Paket ujian dengan kode "${codeParam}" belum ditemukan. Pastikan tautan pengerjaan sudah lengkap atau hubungi guru pengawas.`
             );

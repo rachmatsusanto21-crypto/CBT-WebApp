@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   PlusCircle,
@@ -43,6 +43,7 @@ import { ExamEditModal } from './ExamEditModal';
 import { getAccessToken, getCachedAccessToken, googleSignIn } from '../services/firebaseAuth';
 import { saveActiveExamToDrive, saveQuestionPackageToDrive } from '../services/googleDriveService';
 import { buildStudentExamUrl } from '../utils/examUrlEncoder';
+import { syncExamToFirestore } from '../services/firestoreExams';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -76,8 +77,22 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [isDriveSyncing, setIsDriveSyncing] = useState<boolean>(false);
   const [driveToast, setDriveToast] = useState<string | null>(null);
 
+  // Auto-sync active exams to Firestore so student links work on any device
+  useEffect(() => {
+    if (exams && exams.length > 0) {
+      exams.forEach((ex) => {
+        if (ex.isActive !== false) {
+          syncExamToFirestore(ex).catch(() => {});
+        }
+      });
+    }
+  }, [exams]);
+
   // Copy direct student link for this specific exam
   const handleCopyStudentLink = (ex: Exam) => {
+    // Sync to Firestore so students on other devices (phone, laptop) can immediately load the exam
+    syncExamToFirestore(ex).catch(() => {});
+
     let driveFileId: string | undefined;
     try {
       const storedMapStr = localStorage.getItem('cbt_gdrive_exam_file_ids') || '{}';
@@ -172,7 +187,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setTopic(cleanTopic + compositionTag);
   };
 
-  // Call Gemini API to generate questions (with auto-fallback for Vercel 404 & high demand)
+  // Call Gemini API to generate questions (with auto-fallback for Firebase static hosting & high demand)
   const handleGenerateAI = async () => {
     setGenError('');
     setIsGenerating(true);
@@ -292,6 +307,9 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newExam),
       }).catch((e) => console.warn('Server sync exam warning:', e));
+
+      // Synchronize to Firestore for instant access by student devices on other networks/phones
+      syncExamToFirestore(newExam).catch((e) => console.warn('Firestore sync exam warning:', e));
 
       safeFetchJson('/api/question-history', {
         method: 'POST',
@@ -1359,6 +1377,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             if (onUpdateExam) {
               onUpdateExam(updated);
             }
+            syncExamToFirestore(updated).catch(() => {});
             setSaveSuccessMessage(`Paket ujian ${updated.code} berhasil diperbarui!`);
             setEditingExam(null);
           }}

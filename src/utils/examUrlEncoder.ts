@@ -92,26 +92,69 @@ export function decodeExamPayload(encoded: string): (Exam & { schoolName?: strin
   }
 }
 
+export const FIREBASE_HOSTING_URL = 'https://cbtwebapp-a5c83.web.app';
+export const FIREBASE_ALT_HOSTING_URL = 'https://cbtwebapp-a5c83.firebaseapp.com';
+
 /**
- * Builds the complete shareable student link with exam code, token, and optional Google Drive file ID.
- * NOTE: Does NOT attach the massive questions payload (?p=...) to avoid "414 Request-URI Too Long" / "URL too long" errors.
- * Student devices automatically load the exam via clean URL query parameter and backend API.
+ * Gets the clean public base URL for student devices.
+ * Uses the Firebase Hosting deployed URL (https://cbtwebapp-a5c83.web.app) as requested,
+ * ensuring all shared student links connect directly to the Firebase-hosted application.
+ */
+export function getPublicBaseUrl(): string {
+  try {
+    const customUrl = localStorage.getItem('cbt_custom_app_url');
+    if (customUrl && customUrl.trim().startsWith('http')) {
+      return customUrl.trim().replace(/\/+$/, '');
+    }
+
+    const origin = window.location.origin;
+    // If running on Firebase Hosting, retain current origin
+    if (origin.includes('web.app') || origin.includes('firebaseapp.com')) {
+      return origin.replace(/\/+$/, '');
+    }
+
+    // Default to official Firebase Hosting URL
+    return FIREBASE_HOSTING_URL;
+  } catch {
+    return FIREBASE_HOSTING_URL;
+  }
+}
+
+/**
+ * Builds the ultra-clean, short shareable student link with exam code & token.
+ * Uses query parameters with minimal length (~60-90 characters) so it NEVER triggers
+ * "414 Request-URI Too Long" or proxy header size limits when shared via WhatsApp,
+ * Classroom, or opened on mobile devices.
  */
 export function buildStudentExamUrl(exam: Exam, driveFileId?: string, schoolName?: string): string {
   try {
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    const url = new URL(origin + pathname);
+    const baseUrl = getPublicBaseUrl();
+    const url = new URL(baseUrl);
+    url.pathname = '/';
+    url.search = '';
     url.searchParams.set('mode', 'siswa');
-    url.searchParams.set('examCode', exam.code);
+    url.searchParams.set('examCode', (exam.code || '').trim());
     if (exam.token) {
-      url.searchParams.set('token', exam.token);
+      url.searchParams.set('token', exam.token.trim());
     }
     if (driveFileId) {
-      url.searchParams.set('driveId', driveFileId);
+      url.searchParams.set('driveId', driveFileId.trim());
     }
     return url.toString();
   } catch {
-    return `${window.location.origin}/?mode=siswa&examCode=${encodeURIComponent(exam.code)}${exam.token ? `&token=${encodeURIComponent(exam.token)}` : ''}`;
+    const base = getPublicBaseUrl();
+    return `${base}/?mode=siswa&examCode=${encodeURIComponent((exam.code || '').trim())}${exam.token ? `&token=${encodeURIComponent(exam.token.trim())}` : ''}`;
   }
+}
+
+/**
+ * Alternative offline/hash-based link generator.
+ * Places any full payload in the URL HASH FRAGMENT (#) instead of query parameters (?).
+ * By RFC 3986 HTTP specification, browsers NEVER transmit the '#' fragment to the web server,
+ * making it physically impossible for the HTTP server to throw HTTP 414 "URI Too Long".
+ */
+export function buildHashBasedStudentExamUrl(exam: Exam, schoolName?: string): string {
+  const base = getPublicBaseUrl();
+  const payload = encodeExamPayload(exam, schoolName);
+  return `${base}/?mode=siswa#p=${payload}&token=${encodeURIComponent(exam.token || '')}`;
 }

@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Paket ujian aktif untuk pengerjaan siswa (dapat dibaca oleh siswa dengan kode ujian)
+    match /active_exams/{examCode} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Koleksi master data siswa
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi master paket soal guru
+    match /exams/{examId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi rekap nilai siswa (siswa dapat mengirim hasil ujian, guru dapat membaca dan mengelola)
+    match /exam_results/{resultId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi analisis butir soal, daya pembeda, dan statistik
+    match /exam_analysis/{analysisId} {
+      allow read, write: if true;
+    }
+
+    // Pengaturan identitas dan kop sekolah
+    match /school_settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Log aktivitas aplikasi
+    match /logs/{logId} {
+      allow read, write: if true;
+    }
+  }
+}

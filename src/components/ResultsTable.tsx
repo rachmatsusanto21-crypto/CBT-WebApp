@@ -9,19 +9,70 @@ import {
   Printer,
   Sparkles,
   Search,
-  BookOpen
+  BookOpen,
+  Cloud,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
-import { ExamResult, SchoolSettings } from '../types';
+import { ExamResult, SchoolSettings, Exam } from '../types';
 import { Letterhead } from './Letterhead';
+import { syncResultsToFirestore, syncAnalysisToFirestore, generateExamsAnalysis } from '../services/firestoreSyncService';
+import { saveResultsToDrive, saveAnalysisToDrive } from '../services/googleDriveService';
+import { getAccessToken, googleSignIn } from '../services/firebaseAuth';
 
 interface ResultsTableProps {
   results: ExamResult[];
+  exams?: Exam[];
   schoolSettings: SchoolSettings;
 }
 
-export const ResultsTable: React.FC<ResultsTableProps> = ({ results, schoolSettings }) => {
+export const ResultsTable: React.FC<ResultsTableProps> = ({ results, exams = [], schoolSettings }) => {
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+  const [cloudFeedback, setCloudFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Upload results & item analysis to Firebase Firestore and Google Drive
+  const handleUploadResultsAndAnalysisCloud = async () => {
+    if (results.length === 0) return;
+    setIsSyncingCloud(true);
+    setCloudFeedback(null);
+    try {
+      // 1. Sync to Firebase Firestore
+      const resCount = await syncResultsToFirestore(results);
+      const analysisData = generateExamsAnalysis(exams, results);
+      const anaCount = await syncAnalysisToFirestore(analysisData);
+
+      // 2. Sync to Google Drive
+      let driveNote = '';
+      let token = await getAccessToken();
+      if (!token) {
+        try {
+          const res = await googleSignIn();
+          if (res) token = res.accessToken;
+        } catch {
+          driveNote = ' (Google Drive dapat dihubungkan di menu Cloud Sync)';
+        }
+      }
+      if (token) {
+        await saveResultsToDrive(results, token);
+        await saveAnalysisToDrive(analysisData, token);
+        driveNote = ' & Google Drive (Data Nilai + Analisis Butir Soal)';
+      }
+
+      setCloudFeedback({
+        type: 'success',
+        text: `Berhasil mengunggah ${resCount} nilai & ${anaCount} analisis butir soal ke Firebase Firestore${driveNote}!`,
+      });
+    } catch (err: any) {
+      setCloudFeedback({
+        type: 'error',
+        text: err.message || 'Gagal mengunggah data nilai & analisis ke Cloud.',
+      });
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   const filtered = results.filter(
     (r) =>
@@ -96,15 +147,44 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results, schoolSetti
           </p>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          disabled={results.length === 0}
-          className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl shadow transition-all disabled:opacity-50"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Excel / CSV</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleUploadResultsAndAnalysisCloud}
+            disabled={isSyncingCloud || results.length === 0}
+            className="flex items-center space-x-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50"
+            title="Unggah rekap nilai dan analisis butir soal ke Firebase Firestore & Google Drive"
+          >
+            <Cloud className="w-4 h-4" />
+            <span>{isSyncingCloud ? 'Mengunggah...' : 'Unggah Nilai & Analisis ke Cloud'}</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={results.length === 0}
+            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl shadow transition-all disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Excel / CSV</span>
+          </button>
+        </div>
       </div>
+
+      {cloudFeedback && (
+        <div
+          className={`p-3.5 rounded-2xl text-xs flex items-center space-x-2 border ${
+            cloudFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          {cloudFeedback.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
+          <span>{cloudFeedback.text}</span>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

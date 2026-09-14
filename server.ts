@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import http from "http";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -1329,7 +1330,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = http.createServer({ maxHeaderSize: 128 * 1024 }, app);
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`CBT Web App Sekolah running on http://0.0.0.0:${PORT}`);
   });
 }

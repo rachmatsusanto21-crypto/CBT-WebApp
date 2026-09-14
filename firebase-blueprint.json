@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Data master siswa sekolah",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nisn": { "type": "string" },
+        "name": { "type": "string" },
+        "className": { "type": "string" },
+        "gender": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["id", "name", "className"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Paket naskah soal dan konfigurasi ujian",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "grade": { "type": "string" },
+        "examType": { "type": "string" },
+        "token": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "code", "title", "token"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Rekap nilai dan hasil pengerjaan ujian siswa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentClass": { "type": "string" },
+        "examId": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "score": { "type": "number" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["studentId", "studentName", "score", "submittedAt"]
+    },
+    "ExamAnalysis": {
+      "title": "ExamAnalysis",
+      "description": "Analisis butir soal, daya pembeda, tingkat kesukaran dan remedial",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "examCode": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "subject": { "type": "string" },
+        "totalParticipants": { "type": "number" },
+        "averageScore": { "type": "number" },
+        "highestScore": { "type": "number" },
+        "lowestScore": { "type": "number" },
+        "analyzedAt": { "type": "string" }
+      },
+      "required": ["examId", "analyzedAt"]
+    },
+    "SchoolSetting": {
+      "title": "SchoolSetting",
+      "description": "Kop surat dan pengaturan identitas sekolah",
+      "type": "object",
+      "properties": {
+        "namaSekolah": { "type": "string" },
+        "alamat": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Koleksi data master siswa"
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Koleksi master paket ujian guru"
+    },
+    "/active_exams/{examCode}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Koleksi paket ujian aktif yang dapat diakses siswa"
+    },
+    "/exam_results/{resultId}": {
+      "schema": { "$ref": "#/entities/ExamResult" },
+      "description": "Koleksi rekap nilai siswa"
+    },
+    "/exam_analysis/{analysisId}": {
+      "schema": { "$ref": "#/entities/ExamAnalysis" },
+      "description": "Koleksi analisis butir soal dan statistik ujian"
+    },
+    "/school_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SchoolSetting" },
+      "description": "Pengaturan identitas sekolah"
+    }
+  }
+}

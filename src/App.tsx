@@ -713,6 +713,7 @@ export default function App() {
             {adminTab === 'rekap' && (
               <ResultsTable
                 results={resultsList}
+                exams={exams}
                 schoolSettings={schoolSettings}
               />
             )}
@@ -725,6 +726,7 @@ export default function App() {
                 savedPackages={savedPackages}
                 students={students}
                 schoolSettings={schoolSettings}
+                results={resultsList}
                 onExamsLoaded={(loadedExams) => {
                   setExams((prev) => {
                     const loadedMap = new Map(loadedExams.map((e) => [e.id, e]));
@@ -754,6 +756,17 @@ export default function App() {
                     const merged = [...loadedStudents, ...filtered];
                     try {
                       localStorage.setItem('cbt_students_cache', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  });
+                }}
+                onResultsLoaded={(loadedResults) => {
+                  setResultsList((prev) => {
+                    const loadedMap = new Map(loadedResults.map((r) => [r.id, r]));
+                    const filtered = prev.filter((r) => !loadedMap.has(r.id));
+                    const merged = [...loadedResults, ...filtered];
+                    try {
+                      localStorage.setItem('cbt_results_cache', JSON.stringify(merged));
                     } catch {}
                     return merged;
                   });
